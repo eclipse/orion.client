@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta name="copyright" content="Copyright (c) IBM Corporation and others 2016, 2017." >
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<script src="../../orion/requireErrorHandler.js"></script>
+	<script src="../../requirejs/require.js"></script>
+	<script>
+		/*eslint-env browser, amd*/	
+		require(["../../orion/require-config.js"], function(config){
+			require.config({baseUrl: "../.."});
+			require(["collab/plugins/collabPlugin"], null, self.errback);
+		}, self.errback);
+	</script>
+</head>
+<body>
+	<h1>Orion Collaboration Plugin</h1>
+	<p>This plugin provides a shared workspace with collaboration editing feature.</p>
+</body>
+</html>

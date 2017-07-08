@@ -1,0 +1,8 @@
+[{
+  "endpoint": "/sharedWorkspace",
+  "module": "./lib/sharedWorkspace",
+  "extraOptions": {
+    "root": "/sharedWorkspace/tree/file",
+    "fileRoot": "/file"
+  }
+}]

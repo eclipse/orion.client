@@ -651,9 +651,8 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 	}
 	TextLine.prototype = /** @lends orion.editor.TextLine.prototype */ {
 		/** @private */
-		create: function(_parent, div, drawing) {
+		create: function(_parent, div) {
 			if (this._lineDiv) { return; }
-			this.drawing = drawing;
 			var child = this._lineDiv = this._createLine(_parent, div, this.lineIndex);
 			child._line = this;
 			return child;
@@ -744,7 +743,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 					end += text.length;
 					style = range.style;
 					if (oldSpan) {
-						oldText = oldSpan.firstChild.data;
+						oldText = oldSpan.firstChild ? oldSpan.firstChild.data : " ";
 						oldStyle = oldSpan.viewStyle;
 						if (oldText === text && compare(style, oldStyle)) {
 							oldEnd += oldText.length;
@@ -758,7 +757,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 									if (spanEnd >= changeStart) {
 										spanEnd -= changeCount;
 									}
-									var t = oldSpan.firstChild.data;
+									var t = oldSpan.firstChild ? oldSpan.firstChild.data : " ";
 									var len = t ? t.length : 0;
 									if (oldEnd + len > spanEnd) { break; }
 									oldEnd += len;
@@ -890,11 +889,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				child.innerHTML = style.html;
 				child.ignore = true;
 			} else if (style && style.node) {
-				if (this.drawing) {
-					child.appendChild(style.node);
-				} else {
-					child.appendChild(style.node.cloneNode(true));
-				}
+				child.appendChild(style.node);
 				child.ignore = true;
 			} else if (style && style.bidi) {				
 				child.ignore = true;
@@ -5967,6 +5962,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 
 			/* Destroy DOM */
 			this._domSelection = null;
+			this._peerHighlight = null;
 			this._clipboardDiv = null;
 			this._rootDiv = null;
 			this._scrollDiv = null;
@@ -6598,7 +6594,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 			} else {
 				if (e.selection.length > 1) this._startUndo();
 			}
-			
+
 			var model = this._model;
 			try {
 				if (e._ignoreDOMSelection) { this._ignoreDOMSelection = true; }
@@ -6616,7 +6612,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				if (e._ignoreDOMSelection) { this._ignoreDOMSelection = false; }
 			}
 			this._setSelection(e.selection, show, true, callback);
-			
+
 			undo = this._compoundChange;
 			if (undo) undo.owner.selection = e.selection;
 			
@@ -7370,6 +7366,14 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				}
 			}
 		},
+    /**
+     * Update highlights
+     */
+    _updatePeerHighlight: function() {
+      if (this._peerHighlight) {
+        this._peerHighlight.update();
+      }
+    },
 		_update: function(hScrollOnly) {
 			if (this._redrawCount > 0) { return; }
 			if (this._updateTimer) {
@@ -7486,14 +7490,14 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				var frag = doc.createDocumentFragment();
 				for (lineIndex=lineStart; lineIndex<=lineEnd; lineIndex++) {
 					if (!child || child.lineIndex > lineIndex) {
-						new TextLine(this, lineIndex).create(frag, null, true);
+						new TextLine(this, lineIndex).create(frag, null);
 					} else {
 						if (frag.firstChild) {
 							clientDiv.insertBefore(frag, child);
 							frag = doc.createDocumentFragment();
 						}
 						if (child && child.lineChanged) {
-							child = new TextLine(this, lineIndex).create(frag, child, true);
+							child = new TextLine(this, lineIndex).create(frag, child);
 							child.lineChanged = false;
 						}
 						child = this._getLineNext(child);
@@ -7752,7 +7756,9 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 					}
 				}
 			}
+
 			this._updateDOMSelection();
+      this._updatePeerHighlight();
 
 			if (needUpdate) {
 				var ensureCaretVisible = this._ensureCaretVisible;
@@ -7961,10 +7967,267 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				this.redraw();
 				this._resetLineWidth();
 			}
-		}
-	};//end prototype
+		},
+    /**
+     * Called from 'otAdapter.js'. Initiates work on highlight on the 'textView'
+     *
+     * @param {String} id - Peer id
+     * @param {String} color - Color that will be used for highlight peer's selection
+     * @param {Int} start - Char where peer's selection started
+     * @param {Int} end - Char where peer's selection ended
+     */
+    _addHighlight: function(id, color, start, end) {
+      // if the instance of 'textView' doesnt have an instance of PeerHighlight,
+      // then create one
+      if (this._peerHighlight === undefined) {
+        this._peerHighlight = new PeerHighlight(this);
+      }
+
+      // Add highlight
+      this._peerHighlight.addHighlight(id, color, start, end);
+    },
+    /**
+     * This function is called when a peer leaves. This function calls
+     * the 'removePeer' funtion of the 'PeerHighlight' instance of
+     * this TextView.
+     */
+    _removePeerHighlight: function(id) {
+      this._peerHighlight.removePeer(id);
+    }
+	};
+
+  /**
+   * This class manages collab peer's highlights on user's screen
+   */
+  function PeerHighlight(view) {
+    // List of class variables and functions
+    //
+    // Variables
+    //   _view
+    //   _divs
+    //   _highlights
+    //
+    // Constructor
+    //   PeerHighlight(view)
+    //
+    // Functions
+    //   addHighlight
+    //   createHighlightDiv
+    //   update
+    //   destroy
+    //
+
+
+    /**
+     * Reference to parent 'textView' instance
+     */
+    this._view = view;
+
+    /**
+     * Array of all child 'divs' that (together) creates highlight
+     *
+     * _divs = [
+     *    userId1: {
+     *      div1: <div style="..."></div>
+     *      div2: <div style="..."></div>
+     *      div3: <div style="..."></div>
+     *    },
+     *    userId2: {
+     *      ...
+     *    },
+     *    ...
+     * ] // end of _divs
+     *
+     */
+    this._divs = [];
+
+    /**
+     * Data structure that stores all highlights.
+     * This also enforces rendering of only one highlight at a time.
+     * Even though collab peers can highlight multiple sections on their side.
+     *
+     * _highlights = [
+     *   idOfUser1: {
+     *     'color': 'hexString',
+     *     'start': int,
+     *     'end': int
+     *   },
+     *   idOfUser2: {
+     *     ...
+     *   },
+     *   ...
+     * ]
+     *
+     */
+    this._highlights = [];
+
+  }
+
+  /**
+   * This function adds peer's highlight on the screen
+   */
+  PeerHighlight.prototype.addHighlight = function(id, color, start, end) {
+
+    // Add/update data structure
+    this._highlights[id] = {
+      'color': color,
+      'start': start,
+      'end': end
+    };
+
+    // Update the views
+    this.update();
+  }
+
+  /**
+   * This function removes:
+   * - the peer (from '_highlights') and
+   * - The 3 div elements (in '_divs') that presents highlight of the peer
+   */
+  PeerHighlight.prototype.removePeer = function(peerId) {
+    // Remove peer from data structure
+    delete this._highlights.peerId;
+
+    // Remove divs
+    for (var divNum in this._divs[peerId]) {
+      this._divs[peerId][divNum].remove();
+    }
+  }
+
+  PeerHighlight.prototype.createHighlightDiv = function(color) {
+    var div = util.createElement(this._view._parent.ownerDocument, "div"); //$NON-NLS-1$
+
+    div.style.position = 'absolute';
+
+    // Styles
+    div.style.backgroundColor = color;
+    div.style.opacity = 0.25;
+    div.style.zIndex = 2;
+
+    // Let clicks fall through the div
+    div.style.pointerEvents = 'none';
+
+    return div;
+  }
+
+  /**
+   * This function updates highlight views
+   */
+  PeerHighlight.prototype.update = function() {
+    // Get references and store them in local variables
+    var model = this._view._model;
+    var parent = this._view._clipDiv;
+    var lineOffsets = model._model._lineOffsets;
+
+
+    // Dimension constants
+    var lineHeight = this._view._getLineHeight();
+    var charWidth = 7.2246;
+    /**
+     * Relative position in the document
+     * that is currently at the top edge of the view
+     */
+    var toppx = this._view.getTopPixel();
+    var divVoffset = 0;
+    if (toppx === 0) {
+      divVoffset = 4;
+    }
+    // End of Dimension constants
+
+
+    // For all peer highlights
+    for (var userid in this._highlights) {
+
+      // store start, end, and color of peer in local variable
+      var start = this._highlights[userid].start;
+      var end = this._highlights[userid].end;
+      var color = this._highlights[userid].color;
+
+      // get line number of 'start' and 'end' (char location) of the highlight
+      var startLineNumber = model.getLineAtOffset(start);
+      var endLineNumber = model.getLineAtOffset(end);
+      // Convert them from 'line number' to 'px'
+      var startpx = startLineNumber * lineHeight;
+      var endpx = endLineNumber * lineHeight;
+
+
+      // Reference to the 3 divs
+      var div1, div2, div3;
+      if (this._divs[userid]){
+        // Get divs if divs already exist for the peer
+        div1 = this._divs[userid].div1;
+        div2 = this._divs[userid].div2;
+        div3 = this._divs[userid].div3;
+      } else {
+        // Create divs if they dont already exist for this peer
+        div1 = this.createHighlightDiv(color);
+        div2 = this.createHighlightDiv(color);
+        div3 = this.createHighlightDiv(color);
+
+        // Append Child
+        this._divs[userid] = {}
+        this._divs[userid].div1 = div1;
+        this._divs[userid].div2 = div2;
+        this._divs[userid].div3 = div3;
+        parent.appendChild(div1);
+        parent.appendChild(div2);
+        parent.appendChild(div3);
+      }
+
+
+      // ******************* Highlight div dimension logic ****************** //
+      // TODO Fix: account for 2px on the right. i.e. width = 100% - 2px
+
+      // DIV 1 - for first line selection
+      div1.style.height = lineHeight + 'px';
+      div1.style.top = (startpx - toppx + divVoffset) + 'px';
+      div1.style.left = ((charWidth * (start - lineOffsets[startLineNumber])) + 2) + 'px';
+      // End of div 1
+
+      // DIV 2 - for middle block
+      div2.style.top = (startpx - toppx + lineHeight + divVoffset) + 'px';
+      div2.style.left = '2px';
+      div2.style.width = '100%';
+      // End of div 2
+
+      // DIV 3 - for trailing end
+      div3.style.height = lineHeight + 'px';
+      div3.style.top = (endpx - toppx + divVoffset) + 'px';
+      div3.style.left = '2px';
+      // End of div 3
+
+      // If peer's whole selection is on one line
+      if (startLineNumber === endLineNumber) {
+        div1.style.width = ((end - start) * charWidth) + 'px';
+        div2.style.height = '0px';
+        div3.style.width = '0px';
+      } else {
+        // If peer's selection spans multiple lines: draw...
+        // div1 only on first line,
+        // div2 for the middle block, and
+        // div3 for the trailing end of the peer's selection
+        div1.style.width = '100%';
+        div2.style.height = ((endpx - toppx) - (startpx - toppx) - lineHeight) + 'px';
+        div3.style.width = (charWidth * (end - lineOffsets[endLineNumber])) + 'px';
+      }
+      // *************** End of Highlight div dimension logic *************** //
+
+    } // end of for each peer highlight loop
+
+  } // End of PeerHighlight.update()
+
+  PeerHighlight.prototype.destroy = function() {
+    // Remove all highlight divs
+    for (var peerId in this._divs) {
+      this.removePeer(peerId);
+    }
+
+    this._view = null;
+    this._divs = null;
+    this._highlights = null;
+  }
+
 	mEventTarget.EventTarget.addMixin(TextView.prototype);
 	
 	return {TextView: TextView};
 });
-

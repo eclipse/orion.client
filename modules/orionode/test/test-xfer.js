@@ -23,7 +23,7 @@ var WORKSPACE_ID = "orionode";
 var app = express();
 app.locals.metastore = require('../lib/metastore/fs/store')({workspaceDir: WORKSPACE});
 app.locals.metastore.setup(app);
-app.use(CONTEXT_PATH + '/xfer', require("../lib/xfer")({ fileRoot: CONTEXT_PATH + "/xfer" }));
+app.use(CONTEXT_PATH + '/xfer', require("../lib/xfer").router({ fileRoot: CONTEXT_PATH + "/xfer" }));
 
 var request = supertest.bind(null, app);
 

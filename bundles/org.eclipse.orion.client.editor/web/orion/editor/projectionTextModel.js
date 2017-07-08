@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2012 IBM Corporation and others.
+ * Copyright (c) 2010, 2012, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -107,9 +107,10 @@ define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/edi
 			var removedLineCount = projection._lineCount;
 			var addedCharCount = projection._model.getCharCount();
 			var addedLineCount = projection._model.getLineCount() - 1;
+			var changedText = projection._model.getText();
 			var modelChangingEvent = {
 				type: "Changing", //$NON-NLS-0$
-				text: projection._model.getText(),
+				text: changedText,
 				start: eventStart,
 				removedCharCount: removedCharCount,
 				addedCharCount: addedCharCount,
@@ -122,6 +123,7 @@ define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/edi
 			var modelChangedEvent = {
 				type: "Changed", //$NON-NLS-0$
 				start: eventStart,
+				changedText: text,
 				removedCharCount: removedCharCount,
 				addedCharCount: addedCharCount,
 				removedLineCount: removedLineCount,
@@ -208,10 +210,11 @@ define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/edi
 				var addedLineCount = projection._lineCount;
 				var removedCharCount = projection._model.getCharCount();
 				var removedLineCount = projection._model.getLineCount() - 1;
+				var changedText = model.getText(projection.start, projection.end);
 				if (!noEvents) {
 					var modelChangingEvent = {
 						type: "Changing", //$NON-NLS-0$
-						text: model.getText(projection.start, projection.end),
+						text: changedText,
 						start: eventStart,
 						removedCharCount: removedCharCount,
 						addedCharCount: addedCharCount,
@@ -225,6 +228,7 @@ define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/edi
 					var modelChangedEvent = {
 						type: "Changed", //$NON-NLS-0$
 						start: eventStart,
+						text: changedText,
 						removedCharCount: removedCharCount,
 						addedCharCount: addedCharCount,
 						removedLineCount: removedLineCount,
@@ -459,6 +463,7 @@ define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/edi
 			var modelChangedEvent1 = {
 				type: "Changed", //$NON-NLS-0$
 				start: change.start,
+				text: change.text,
 				removedCharCount: change.removedCharCount,
 				addedCharCount: change.addedCharCount,
 				removedLineCount: change.removedLineCount,

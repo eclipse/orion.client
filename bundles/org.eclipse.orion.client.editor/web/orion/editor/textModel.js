@@ -549,6 +549,8 @@ define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'or
 			};
 			this.onChanging(modelChangingEvent);
 			
+			var changedText = text;
+
 			//TODO this should be done the loops below to avoid getText()
 			if (newLineOffsets.length === 0) {
 				var startLineOffset = this.getLineStart(startLine), endLineOffset;
@@ -623,6 +625,7 @@ define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'or
 			var modelChangedEvent = {
 				type: "Changed", //$NON-NLS-0$
 				start: eventStart,
+				text: changedText,
 				removedCharCount: removedCharCount,
 				addedCharCount: addedCharCount,
 				removedLineCount: removedLineCount,

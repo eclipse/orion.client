@@ -53,10 +53,19 @@ define([
 			this.filteredResources = filteredResources;
 		}
 		this.filter = new FileFilter(this.filteredResources);
+		this._annotations = [];
+		// Listen to annotation changed events
+		this._annotationChangedHandler = this._handleAnnotationChanged.bind(this)
+		this.fileClient.addEventListener('AnnotationChanged', this._annotationChangedHandler);
 	}
 	FileModel.prototype = new mExplorer.ExplorerModel();
 	objects.mixin(FileModel.prototype, /** @lends orion.explorer.FileModel.prototype */ {
-		getRoot: function(onItem) {
+		destroy: function () {
+			this.fileClient.removeEventListener("AnnotationChanged", this._annotationChangedHandler);
+			mExplorer.ExplorerModel.prototype.destroy.call(this);
+		},
+
+		getRoot: function(onItem){
 			onItem(this.root);
 		},
 
@@ -152,6 +161,27 @@ define([
 				result = this.root.Children.length > 0;
 			}
 			return result;
+		},
+
+		getAnnotations: function() {
+			return this._annotations;
+		},
+
+		_handleAnnotationChanged: function(evt) {
+			var model = this;
+			if (evt.removeTypes) {
+				for (var i = this._annotations.length - 1; i >= 0; i--) {
+					for (var j = 0; j < evt.removeTypes.length; j++) {
+						if (this._annotations[i] instanceof evt.removeTypes[j]) {
+							this._annotations.splice(i, 1);
+							break;
+						}
+					}
+				}
+			}
+			evt.annotations.forEach(function(annotation) {
+				model._annotations.push(annotation);
+			});
 		}
 	});
 
@@ -274,10 +304,13 @@ define([
 		this.checkbox = false;
 		this._hookedDrag = false;
 		this.filteredResources = options.filteredResources;
+		this._annotations = [];
 		var modelEventDispatcher = options.modelEventDispatcher ? options.modelEventDispatcher : new EventTarget();
 		this.modelEventDispatcher = modelEventDispatcher;
-		//Listen to all resource changed events
+		// Listen to all resource changed events
 		this.fileClient.addEventListener("Changed", this._resourceChangedHandler = this.handleResourceChange.bind(this));
+		// Listen to annotation changed events
+		this.fileClient.addEventListener('AnnotationChanged', this._annotationChangedHandler = this._handleAnnotationChanged.bind(this));
 		// Listen to model changes from fileCommands
 		var _self = this;
 		this._modelListeners = {};
@@ -355,6 +388,7 @@ define([
 				parentNode.removeEventListener("click", this._clickListener);
 			}
 			this.fileClient.removeEventListener("Changed", this._resourceChangedHandler);
+			this.fileClient.removeEventListener("AnnotationChanged", this._annotationChangedHandler);
 			mExplorer.Explorer.prototype.destroy.call(this);
 		},
 		_isFileCreationAtRootEnabled : function() {
@@ -404,7 +438,8 @@ define([
 					type: "create",
 					select: createdItem.eventData ? createdItem.eventData.select : false,
 					newValue: createdItem.result,
-					parent: this._getUIModel(createdItem.parent)
+					parent: this._getUIModel(createdItem.parent),
+					silent: evt.silent
 				};
 			}.bind(this));
 			return this.onModelCreate(items[0]).then(function( /*result*/ ) {
@@ -419,7 +454,8 @@ define([
 				return {
 					oldValue: uiModel,
 					newValue: null,
-					parent: uiModel ? uiModel.parent : null
+					parent: uiModel ? uiModel.parent : null,
+					silent: evt.silent
 				};
 			}.bind(this));
 			var newEvent = {
@@ -436,7 +472,8 @@ define([
 				return {
 					oldValue: this._getUIModel(movedItem.source),
 					newValue: movedItem.result,
-					parent: this._getUIModel(movedItem.target)
+					parent: this._getUIModel(movedItem.target),
+					silent: evt.silent
 				};
 			}.bind(this));
 			var newEvent = {
@@ -464,8 +501,15 @@ define([
 		//		onLinkClick: function(clickEvent) {
 		//			this.dispatchEvent(clickEvent);
 		//		},
+
+		_handleAnnotationChanged: function(evt) {
+			if (this.myTree) {
+				this.myTree.requestAnnotationRefresh();
+			}
+		},
+
 		onModelCreate: function(modelEvent) {
-			return this.changedItem(modelEvent.parent, true);
+			return this.changedItem(modelEvent.parent, !modelEvent.silent);
 		},
 		onModelCopy: function(modelEvent) {
 			var ex = this,
@@ -476,7 +520,7 @@ define([
 				changedLocations[itemParent.Location] = itemParent;
 			});
 			return Deferred.all(Object.keys(changedLocations).map(function(loc) {
-				return ex.changedItem(changedLocations[loc], true);
+				return ex.changedItem(changedLocations[loc], !modelEvent.silent);
 			}));
 		},
 		onModelMove: function(modelEvent) {
@@ -513,7 +557,7 @@ define([
 				}
 			});
 			return Deferred.all(Object.keys(changedLocations).map(function(loc) {
-				return ex.changedItem(changedLocations[loc], true);
+				return ex.changedItem(changedLocations[loc], !modelEvent.silent);
 			}));
 		},
 		onModelDelete: function(modelEvent) {
@@ -545,7 +589,7 @@ define([
 				}
 			});
 			return Deferred.all(Object.keys(changedLocations).map(function(loc) {
-				return ex.changedItem(changedLocations[loc], true);
+				return ex.changedItem(changedLocations[loc], !modelEvent.silent);
 			}));
 		},
 
@@ -1034,7 +1078,15 @@ define([
 					var promise = this.dragAndDrop(targetItem, file, this, unzip, false, true);
 					var done = function() {
 						destroy();
-						this.changedItem(targetItem, true);
+						this.fileClient.dispatchEvent({
+							type: "Changed",
+							created: [{
+								parent: targetItem.Location,
+								eventData: {
+									select: false
+								}
+							}]
+						});
 					}.bind(this);
 					promise.then(
 						done,

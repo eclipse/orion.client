@@ -333,22 +333,31 @@ define([
 				commandRegistry.registerCommandContribution(contextMenuActionsScope, commandId, 1, "orion.commonNavContextMenuGroup/orion.relatedActions/orion.Extensions"); //$NON-NLS-0$
 			});
 
-			// Retrieve and register project commands
-			return this.preferences.get("/common-nav").then(function(prefs) { //$NON-NLS-0$
-				var show = prefs["showNewProjectCommands"];
-				if (show === undefined || show) {
-					commandRegistry.addCommandGroup(fileActionsScope, "orion.projectsNewGroup", 100, messages["Project"], "orion.menuBarFileGroup/orion.newContentGroup"); //$NON-NLS-1$ //$NON-NLS-0$
-					commandRegistry.addCommandGroup(contextMenuActionsScope, "orion.projectsNewGroup", 100, messages["Project"], "orion.commonNavContextMenuGroup/orion.newGroup/orion.New"); //$NON-NLS-1$ //$NON-NLS-0$
-					var position = 0;
-					ProjectCommands.getCreateProjectCommands(commandRegistry).forEach(function(command) {
-						if (!util.isElectron) {
-							commandRegistry.registerCommandContribution(fileActionsScope, command.id, position, "orion.menuBarFileGroup/orion.newContentGroup/orion.projectsNewGroup"); //$NON-NLS-0$
-							commandRegistry.registerCommandContribution(contextMenuActionsScope, command.id, position, "orion.commonNavContextMenuGroup/orion.newGroup/orion.New/orion.projectsNewGroup"); //$NON-NLS-0$
-						}
-						position++;
-					});
-				}
-			});
+			return Deferred.all([
+				// Retrieve and register project commands
+				this.preferences.get("/common-nav").then(function(prefs) { //$NON-NLS-0$
+					var show = prefs["showNewProjectCommands"];
+					if (show === undefined || show) {
+						commandRegistry.addCommandGroup(fileActionsScope, "orion.projectsNewGroup", 100, messages["Project"], "orion.menuBarFileGroup/orion.newContentGroup"); //$NON-NLS-1$ //$NON-NLS-0$
+						commandRegistry.addCommandGroup(contextMenuActionsScope, "orion.projectsNewGroup", 100, messages["Project"], "orion.commonNavContextMenuGroup/orion.newGroup/orion.New"); //$NON-NLS-1$ //$NON-NLS-0$
+						var position = 0;
+						ProjectCommands.getCreateProjectCommands(commandRegistry).forEach(function(command) {
+							if (!util.isElectron) {
+								commandRegistry.registerCommandContribution(fileActionsScope, command.id, position, "orion.menuBarFileGroup/orion.newContentGroup/orion.projectsNewGroup"); //$NON-NLS-0$
+								commandRegistry.registerCommandContribution(contextMenuActionsScope, command.id, position, "orion.commonNavContextMenuGroup/orion.newGroup/orion.New/orion.projectsNewGroup"); //$NON-NLS-0$
+							}
+							position++;
+						});
+					}
+				}),
+				//Collaboration Mode
+				this.preferences.get("/plugins").then(function(plugins) {
+					if (plugins["collab/plugins/collabPlugin.html"]) {
+						commandRegistry.registerCommandContribution(contextMenuActionsScope, "orion.collab.shareProject", 1);
+						commandRegistry.registerCommandContribution(contextMenuActionsScope, "orion.collab.unshareProject", 1);
+					}
+				})
+			]);
 		},
 		/**
 		 * @callback

@@ -111,7 +111,7 @@ module.exports = function(options) {
 					return writeError(singleUser ? 403 : 400, res, err);
 				}
 				getWorkspaceJson(req, workspace).then(function(workspaceJson) {
-					api.writeResponse(null, res, null, workspaceJson, true);
+					return api.writeResponse(null, res, null, workspaceJson, true);
 				}).catch(function(err) {
 					api.writeResponse(400, res, null, err);
 				});

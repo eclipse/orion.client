@@ -120,6 +120,8 @@ define({
 	"selectNextTab": "Select Next Editor Tab",
 	"selectPreviousTab": "Select Previous Editor Tab",
 	"showTabDropdown": "Display Open Editor Tabs",
+	"Collaborate": "Collaborate",
+	"CollaborateToolTip": "Start a Collaboration session on the current file",
 	"closeOthers":"Close Others Tabs",
 	"closeTotheRight":"Close Tabs To The Right",
 	"keepOpen":"Keep Open",

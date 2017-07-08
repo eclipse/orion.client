@@ -54,7 +54,7 @@ exports = module.exports = function(options) {
 		'./bundles/org.eclipse.orion.client.git/web',
 		'./bundles/org.eclipse.orion.client.webtools/web',
 		'./bundles/org.eclipse.orion.client.users/web',
-		'./bundles/org.eclipse.orion.client.cf/web',
+		'./bundles/org.eclipse.orion.client.cf/web'
 	];
 	var fullStaticAssets = options.prependStaticAssets.concat(originalStaticAssets).concat(options.appendStaticAssets);
 	fullStaticAssets = fullStaticAssets.forEach(function(bundlePath) {

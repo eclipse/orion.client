@@ -68,8 +68,8 @@ function startServer(options) {
 			var additionalEndpoints = require(options.configParams["additional.endpoint"]);
 			additionalEndpoints.forEach(function(additionalEndpoint){
 				if(additionalEndpoint.endpoint){
-					additionalEndpoint.authenticated ?
-						app.use(additionalEndpoint.endpoint, checkAuthenticated, require(additionalEndpoint.module).router(options)) :
+					additionalEndpoint.authenticated ? 
+						app.use(additionalEndpoint.endpoint, checkAuthenticated, require(additionalEndpoint.module).router(options))	 : 
 						app.use(additionalEndpoint.endpoint, require(additionalEndpoint.module).router(options));
 				}else{
 					var extraModule = require(additionalEndpoint.module);
@@ -77,6 +77,9 @@ function startServer(options) {
 					if (middleware)	app.use(middleware); // use this module as a middleware 
 				}
 			});
+		}
+		if(options.configParams["orion.collab.enabled"]){
+			app.use('/sharedWorkspace', require('./lib/sharedWorkspace').router({sharedWorkspaceFileRoot: contextPath + '/sharedWorkspace/tree/file', fileRoot: contextPath + '/file', options: options  }));
 		}
 		app.use(require('./lib/user').router(options));
 		app.use('/site', checkAuthenticated, require('./lib/sites')(options));
@@ -88,7 +91,7 @@ function startServer(options) {
 		app.use('/gitapi', checkAuthenticated, require('./lib/git')({ gitRoot: contextPath + '/gitapi', fileRoot: /*contextPath + */'/file', workspaceRoot: /*contextPath + */'/workspace', options: options}));
 		app.use('/cfapi', checkAuthenticated, require('./lib/cf')({ fileRoot: contextPath + '/file', options: options}));
 		app.use('/prefs', checkAuthenticated, require('./lib/controllers/prefs').router(options));
-		app.use('/xfer', checkAuthenticated, require('./lib/xfer')({fileRoot: contextPath + '/file', options:options}));
+		app.use('/xfer', checkAuthenticated, require('./lib/xfer').router({fileRoot: contextPath + '/file', options:options}));
 		app.use('/metrics', require('./lib/metrics').router(options));
 		app.use('/version', require('./lib/version').router(options));
 		if (options.configParams.isElectron) app.use('/update', require('./lib/update').router(options));
@@ -101,6 +104,9 @@ function startServer(options) {
 			var prependStaticAssets = options.configParams["prepend.static.assets"] && options.configParams["prepend.static.assets"].split(",") || [];
 			var appendStaticAssets = options.configParams["append.static.assets"] && options.configParams["append.static.assets"].split(",") || [];
 			var orionode_static = path.normalize(path.join(LIBS, 'orionode.client/'));
+			if(options.configParams["orion.collab.enabled"]){
+				appendStaticAssets.push('./bundles/org.eclipse.orion.client.collab/web');
+			}
 			app.use(require('./lib/orion_static')({ orionClientRoot: ORION_CLIENT, maxAge: options.maxAge, orionode_static: orionode_static, prependStaticAssets: prependStaticAssets, appendStaticAssets: appendStaticAssets}));
 		}
 

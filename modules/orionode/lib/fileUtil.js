@@ -317,7 +317,7 @@ var writeFileMetadata = exports.writeFileMetadata = function(req, res, fileRoot,
 			result.ETag = etag;
 			res.setHeader('ETag', etag);
 		}
-		api.writeResponse(null, res, null, result, true, true);
+		return api.writeResponse(null, res, null, result, true, true);
 	})
 	.catch(api.writeError.bind(null, 500, res));
 };
@@ -362,8 +362,8 @@ function fileJSON(fileRoot, workspaceRoot, file, stats, depth, metadataMixins) {
 
 /**
  * Helper for fulfilling a file POST request (for example, copy, move, or create).
- * @param {String} fileRoot The route of the /file handler (not including context path)
  * @param {String} workspaceRoot The route of the /workspace handler (not including context path)
+ * @param {String} fileRoot The route of the /file handler (not including context path)
  * @param {Object} req
  * @parma {Object} res
  * @param {String} wwwpath
@@ -410,7 +410,7 @@ exports.handleFilePOST = function(workspaceRoot, fileRoot, req, res, destFile, m
 			if (!sourceUrl) {
 				return api.writeError(400, res, 'Missing Location property in request body');
 			}
-			var sourceFile = getFile(req, sourceUrl.replace(/^\/file/, ""));
+			var sourceFile = getFile(req, sourceUrl.replace(new RegExp("^"+fileRoot), ""));
 			return fs.statAsync(sourceFile.path)
 			.then(function(/*stats*/) {
 				return isCopy ? copy(sourceFile.path, destFile.path) : fs.renameAsync(sourceFile.path, destFile.path);

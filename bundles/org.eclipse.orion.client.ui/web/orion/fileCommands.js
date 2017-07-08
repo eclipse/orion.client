@@ -1263,7 +1263,7 @@ define(['i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 'orion/i18n
 					}
 				}
 			});
-		commandService.addCommand(pasteFromBufferCommand);		
+		commandService.addCommand(pasteFromBufferCommand);
 		return new Deferred().resolve();
 	};
 		

@@ -13,6 +13,7 @@
 
 .navlink > span {
 	color: inherit;
+	vertical-align: text-bottom;
 }
 
 .nav_fakelink:hover {
@@ -1601,3 +1602,84 @@ html[dir="rtl"] .fileExplorerProgressDiv { /* ACGC */
 	margin-left: auto;	
 }
 
+.treeAnnotation {
+	pointer-events: none;
+	display: inline-block;
+	vertical-align: bottom;
+	padding: 0 2px;
+	height: 20px;
+}
+
+.navAnnotation .collabAnnotation {
+	pointer-events: initial;
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	font-size: 11px;
+	font-weight: bold;
+	font-family: monospace;
+	line-height: 16px;
+	text-align: center;
+	color: #fff;
+	margin: 2px 2px 2px 2px;
+	cursor: pointer;
+    vertical-align: bottom;
+}
+
+.collabAnnotation.collabEditing {
+    animation: collab-editing 1s infinite;
+}
+
+@keyframes collab-editing {
+    0% {
+		box-shadow: rgba(127, 191, 255, 0) 0 0 4px 2px;
+	}
+    50% {
+		box-shadow: rgba(127, 191, 255, 1) 0 0 4px 2px;
+    }
+    100% {
+		box-shadow: rgba(127, 191, 255, 0) 0 0 4px 2px;
+	}
+}
+
+.treeAnnotation .overlay {
+	width: 7px;
+	height: 7px;
+	display: inline-block;
+	background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAcAAAAHCAYAAADEUlfTAAAAAXNSR0IArs4c6QAAAAZiS0dEAAAAAAAA+UO7fwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9sJEAQvB2JVdrAAAAAdaVRYdENvbW1lbnQAAAAAAENyZWF0ZWQgd2l0aCBHSU1QZC5lBwAAAD1JREFUCNdtjkESADAEAzemf69f66HMqGlOIhYiFRFRtSQBWAY7mzx+EDTL6sSgb1jTk7Q87rxyqe37fXsAa78gLyZnRgEAAAAASUVORK5CYII=");
+    position: relative;
+    left: -7px;
+	top: 7px;
+}
+
+.treeAnnotation .editingAnnotation {
+	height: 16px;
+	line-height: 16px;
+	font-size: 16px;
+	text-shadow: 0px 0px 1px #000000;
+	display: inline-block;
+	cursor: pointer;
+	margin: 2px;
+	pointer-events: initial;
+    vertical-align: bottom;
+}
+
+.treetable-tooltip {
+	z-index: 999;
+	padding: 10px;
+	background-color: #fff;
+	border-width: 1px;
+	border-style: solid;
+	word-break: break-all;
+	width: 200px;
+	min-height: 20px;
+	position: absolute;
+}
+
+.treetable-tooltip .cross {
+	position: absolute;
+	right: 3px;
+	top: 1px;
+	cursor: pointer;
+}

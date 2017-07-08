@@ -163,7 +163,7 @@ module.exports = function(options) {
 		}
 
 		search(searchOpts).then(function(result) {
-			api.writeResponse(200, res, null, result);
+			return api.writeResponse(200, res, null, result);
 		}).catch (function(err) {
 			api.writeError(400, res, err);
 		});

@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2014 IBM Corporation and others.
+ * Copyright (c) 2010, 2014, 2017 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -10,7 +10,7 @@
  ******************************************************************************/
 
 /*eslint-env browser, amd*/
-define(['i18n!orion/nls/messages', 'orion/webui/littlelib'], function(messages, lib) {
+define(['i18n!orion/nls/messages', 'orion/webui/littlelib', 'orion/Deferred'], function(messages, lib, Deferred) {
 
 	/**
 	 * Constructs a new TableTree with the given options.
@@ -34,6 +34,7 @@ define(['i18n!orion/nls/messages', 'orion/webui/littlelib'], function(messages, 
 	 *   <li>getRoot(onItem)</li>
 	 *   <li>getChildren(parentItem, onComplete)</li>
 	 *   <li>getId(item)  // must be a valid DOM id</li>
+	 *   <li>(optional) getAnnotations() // returns an array of Annotation</li>
 	 * </ul>
 	 * 
 	 * Renderers must implement:
@@ -75,6 +76,7 @@ define(['i18n!orion/nls/messages', 'orion/webui/littlelib'], function(messages, 
 			this._tableElement = options.tableElement || "table"; //$NON-NLS-0$
 			this._tableBodyElement = options.tableBodyElement || "tbody"; //$NON-NLS-0$
 			this._tableRowElement = options.tableRowElement || "tr"; //$NON-NLS-0$
+			this._annotationRefreshRequested = false;
 			
 			// Generate the table
 			this._treeModel.getRoot(function (root) {
@@ -173,6 +175,108 @@ define(['i18n!orion/nls/messages', 'orion/webui/littlelib'], function(messages, 
 			if (this._renderer.rowsChanged) {
 				this._renderer.rowsChanged();
 			}
+			this.requestAnnotationRefresh();
+		},
+
+		/**
+		 * Redraw the annotation according to model.getAnnotations().
+		 * 
+		 * This function assumes model.getAnnotations() exists.
+		 */
+		_redrawAnnotation: function() {
+			// TODO: should I move this part to renderer? If so, how?
+			var tree = this;
+			var annotations = tree._treeModel.getAnnotations();
+			// Remove existing annotations
+			var existingAnnotations = this._parent.getElementsByClassName('treeAnnotationOn');
+			var annotationsToRemove = [];
+			for (var i = 0; i < existingAnnotations.length; i++){
+				annotationsToRemove.push(existingAnnotations[i]);
+			};
+			annotationsToRemove.forEach(function(annotation) {
+				while (annotation.firstChild) {
+					annotation.removeChild(annotation.firstChild);
+				}
+				annotation.classList.remove('treeAnnotationOn');
+			})
+			// Add new annotations
+			// A map from tree item ID to a list of its annotation HTML elements
+			var annotationElementsByItem = {};
+			var promises = [];
+			annotations.forEach(function(annotation) {
+				var promise = new Deferred();
+				promises.push(promise);
+				annotation.findDeepestFitId(tree._treeModel, function(id) {
+					// Make sure there is a place to show the annotation
+					if (!id) {
+						promise.resolve();
+						return;
+					}
+					var container = document.getElementById(id + 'Annotation');
+					if (!container) {
+						promise.resolve();
+						return;
+					}
+					var annotationElement = annotation.generateHTML();
+					if (!annotationElement) {
+						promise.resolve();
+						return;
+					}
+					if (!annotationElementsByItem[id]) {
+						annotationElementsByItem[id] = [];
+					}
+					annotationElement.annotation = annotation;
+					annotationElementsByItem[id].push(annotationElement);
+					promise.resolve();
+				});
+			});
+			Deferred.all(promises).then(function() {
+				// All async calls ends. Add these annotations now.
+				for (var elementid in annotationElementsByItem) {
+					if (annotationElementsByItem.hasOwnProperty(elementid)) {
+						var annotationsToAdd = annotationElementsByItem[elementid];
+						var container = document.getElementById(elementid + 'Annotation');
+						container.classList.add('treeAnnotationOn');
+						// var html = annotationsToAdd[0];
+						// container.appendChild(html);
+						// if (annotationsToAdd.length > 1) {
+						// 	var overlay = document.createElement('div');
+						// 	overlay.classList.add('overlay');
+						// 	container.appendChild(overlay);
+						// }
+						var showEditing = false;
+						annotationsToAdd.forEach(function (html) {
+						    container.appendChild(html);
+							// Tooltip
+							// TODO: make it general
+							html.addEventListener('click', function(e) {
+								if (tree.tooltip) {
+									//tree.tooltip.remove();
+								}
+								var tooltip = document.createElement('div');
+								tooltip.innerHTML = html.annotation.getDescription();
+								tooltip.classList.add("treetable-tooltip");
+								tooltip.style.left = e.clientX + 'px';
+								tooltip.style.top = e.clientY + 'px';
+								var cross = document.createElement('div');
+								cross.innerHTML = '×';
+								cross.classList.add("cross");
+								tooltip.appendChild(cross);
+								document.body.appendChild(tooltip);
+								tooltip.remove = function (e2) {
+									window.removeEventListener('click', tooltip.remove);
+									document.body.removeChild(tooltip);
+									tree.tooltip = null;
+								};
+								setTimeout(function() {
+									window.addEventListener('click', tooltip.remove);
+								}, 0);
+								tree.tooltip = tooltip;
+							});
+						});
+					}
+				}
+			});
 		},
 		
 		getSelected: function() {
@@ -241,6 +345,28 @@ define(['i18n!orion/nls/messages', 'orion/webui/littlelib'], function(messages, 
 					console.log(messages["could not find table row "] + parentId);
 				}
 			}
+		},
+
+		/**
+		 * Request an annotation refresh using the information provided by
+		 * model.getAnnotations().
+		 */
+		requestAnnotationRefresh: function() {
+			if (!this._treeModel.getAnnotations) {
+				return;
+			}
+
+			if (this._annotationRefreshRequested) {
+				return;
+			}
+
+			// Refresh annotation in next tick to avoid duplicate requests
+			var tree = this;
+			this._annotationRefreshRequested = true;
+			setTimeout(function() {
+				tree._annotationRefreshRequested = false;
+				tree._redrawAnnotation();
+			}, 0);
 		},
 		
 		getContentNode: function() {
@@ -397,6 +523,63 @@ define(['i18n!orion/nls/messages', 'orion/webui/littlelib'], function(messages, 
 		}
 	};  // end prototype
 	TableTree.prototype.constructor = TableTree;
+
+	/**
+	 * Annotation descriptor.
+	 * 
+	 * Note: I'd like to use the annotation in editor bundle. However that one
+	 *       is not in ui bundle and coupling to the editor too much.
+	 * 
+	 * @interface
+	 * @name {orion.treetable.TableTree.IAnnotation}
+	 */
+	TableTree.IAnnotation = function() {};
+
+	/**
+	 * Get the deepest item that this annotation should display at.
+	 * 
+	 * @example
+	 *     Suppose we have a file located in /folder/subfolder/file.ext and
+	 *     the tree table is in this status:
+	 *     - (/)
+	 *        - (/folder)
+	 *           + (/folder/subfolder)    <- this folder collapses
+	 *     Then the annotation of /folder/subfolder/file.ext should be at
+	 *     /folder/subfolder since it is the deepest item fits it.
+	 * 
+	 * @abstract
+	 * 
+	 * @param {orion.explorer.ExplorerModel} model - the model of the tree
+	 * @param {Function} - callback that takes the DOM ID of an item from the
+	 *     model as parameter
+	 */
+	TableTree.IAnnotation.prototype.findDeepestFitId = function(model, callback) {
+		throw new Error('Not implemented.');
+	};
+
+	/**
+	 * Get description of this annotation which can be used in for examole
+	 * tooltip.
+	 * 
+	 * @abstract
+	 * 
+	 * @return {string} - description
+	 */
+	TableTree.IAnnotation.prototype.getDescription = function() {
+		throw new Error('Not implemented.');
+	};
+
+	/**
+	 * Generate a new HTML element of this annotation.
+	 * 
+	 * @abstract
+	 * 
+	 * @return {Element} - the HTML element of this annotation
+	 */
+	TableTree.IAnnotation.prototype.generateHTML = function() {
+		throw new Error('Not implemented.');
+	};
+
 	//return module exports
 	return {TableTree: TableTree};
 });

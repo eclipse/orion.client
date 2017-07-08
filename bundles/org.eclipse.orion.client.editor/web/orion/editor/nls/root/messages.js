@@ -27,7 +27,7 @@ define({//Default message bundle
 	"diffAdded": "Diff Added Lines", //$NON-NLS-1$ //$NON-NLS-0$
 	"diffDeleted": "Diff Deleted Lines", //$NON-NLS-1$ //$NON-NLS-0$
 	"diffModified": "Diff Modified Lines", //$NON-NLS-1$ //$NON-NLS-0$
-	
+	"collabLineChanged": "Collab Line Changed", //$NON-NLS-1$ //$NON-NLS-0$
 	"lineUp": "Line Up", //$NON-NLS-1$ //$NON-NLS-0$
 	"lineDown": "Line Down", //$NON-NLS-1$ //$NON-NLS-0$
 	"lineStart": "Line Start", //$NON-NLS-1$ //$NON-NLS-0$

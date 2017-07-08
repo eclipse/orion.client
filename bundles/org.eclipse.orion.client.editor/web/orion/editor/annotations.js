@@ -237,6 +237,10 @@ define("orion/editor/annotations", ['i18n!orion/editor/nls/messages', 'orion/edi
 	 * Diff Modification annotation type.
 	 */
 	AnnotationType.ANNOTATION_DIFF_MODIFIED = "orion.annotation.diffModified"; //$NON-NLS-0$
+	/**
+	 * Collab Line Change annotation type.
+	 */
+	AnnotationType.ANNOTATION_COLLAB_LINE_CHANGED = "orion.annotation.collabLineChanged"; //$NON-NLS-0$
 
 	/** @private */
 	var annotationTypes = {};
@@ -329,6 +333,7 @@ define("orion/editor/annotations", ['i18n!orion/editor/nls/messages', 'orion/edi
 	registerType(AnnotationType.ANNOTATION_DIFF_ADDED);
 	registerType(AnnotationType.ANNOTATION_DIFF_DELETED);
 	registerType(AnnotationType.ANNOTATION_DIFF_MODIFIED);
+	registerType(AnnotationType.ANNOTATION_COLLAB_LINE_CHANGED, true);
 
 	AnnotationType.registerType(AnnotationType.ANNOTATION_FOLDING, FoldingAnnotation);
 

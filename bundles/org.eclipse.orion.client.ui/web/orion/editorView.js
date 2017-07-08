@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2016 IBM Corporation and others.
+ * Copyright (c) 2010, 2016, 2017 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License v1.0
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution
@@ -47,7 +47,7 @@ define([
 	'orion/commonPreferences',
 	'embeddedEditor/helper/memoryFileSysConst',
 	'orion/objects',
-	'orion/formatter'	
+	'orion/formatter'
 ], function(
 	messages,
 	mEditor, mAnnotations, mEventTarget, mTextView, mTextModelFactory, mEditorFeatures, mHoverFactory, mContentAssist,
@@ -483,6 +483,15 @@ define([
 				statusReporter: this.statusReporter,
 				domNode: this._parent,
 				syntaxHighlighter: this.syntaxHighlighter
+			});
+			this.preferences.get("/plugins").then(function(plugins) {
+				if (plugins["collab/plugins/collabPlugin.html"]) {
+					require(['orion/collab/collabClient'], function(mCollabClient){
+						mCollabClient.init(function() {
+							var collab = new mCollabClient.CollabClient(editor, that.inputManager, that.fileClient, that.serviceRegistry, that.commandRegistry, that.preferences);
+						})
+					});
+				}
 			});
 			editor.id = "orion.editor"; //$NON-NLS-0$
 			editor.processParameters = function(params) {
