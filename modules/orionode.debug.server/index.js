@@ -74,7 +74,7 @@ function install(options, io) {
     });
 
     // Main logic
-    io.of('/debug').on('connection', createDebugServer(adapterPool));
+    io.of('/debug').on('connection', createDebugServer(adapterPool, options));
 
     return true;
 }

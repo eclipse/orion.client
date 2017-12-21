@@ -184,7 +184,6 @@ define([
 			this._createFormatterCommand();
 			this._createSaveCommand();
 			this._createOpenFolderCommand();
-			this._createOpenRecentCommand();
 			this._createSwitchWorkspaceCommand();
 			this._createReferencesCommand();
 			this._createOpenDeclCommand();
@@ -702,55 +701,25 @@ define([
 					return util.isElectron;
 				},
 				callback: function() {
+					var uriTemplate = new URITemplate("#{,resource,params*}"); //$NON-NLS-0$
 					window.__electron.remote.dialog.showOpenDialog({properties: ['openDirectory']}, function(result) {
 						if (!result) return;
-						that.fileClient.changeWorkspace(result[0]).then(function() {
+						var pathSegs = result[0].split(/[\\\/]/);
+						var FolderName = pathSegs[pathSegs.length - 1];
+						var workspaceId = Date.now() + FolderName;
+						that.fileClient.createWorkspace(result[0], workspaceId, result[0]).then(function(root) {
+							window.location = uriTemplate.expand({resource: root.Location});
 							localStorage.removeItem("/inlineSearchOtherScope");
 							var searchClient = that.serviceRegistry.getService("orion.core.search.client");
 							if (searchClient) {
 								searchClient.setLocationOther(null);
 							}
 							delete sessionStorage.lastFile;
-						});			
+						});
 					});
 				}
 			});
 			this.commandService.addCommand(openFolderCommand);
-		},
-		_createOpenRecentCommand: function() {
-			var that = this;		
-			if(this.preferences){
-				this.preferences.get("/workspace",undefined, {noCache:true}).then(function(prefs) {
-					return prefs.recentWorkspaces;
-				}).then(function(recentworkspaces){
-					var openRecentCommand = new mCommands.Command({
-						name: messages.OpenRecent,
-						selectionClass: "dropdownSelection", //$NON-NLS-0$
-						id: "orion.edit.openRecent", //$NON-NLS-0$
-						visibleWhen: /** @callback */ function(items, data) {
-							return util.isElectron && !!recentworkspaces;
-						},
-						choiceCallback: function() {
-							return recentworkspaces.map(function(folderLocation) {
-								return {
-									name: folderLocation,
-									callback: function() {
-										that.fileClient.changeWorkspace(folderLocation).then(function() {
-											localStorage.removeItem("/inlineSearchOtherScope");
-											var searchClient = that.serviceRegistry.getService("orion.core.search.client");
-											if (searchClient) {
-												searchClient.setLocationOther(null);
-											}
-											delete sessionStorage.lastFile;
-										});
-									}
-								};
-							});
-						}
-					});
-				that.commandService.addCommand(openRecentCommand);
-			});
-			}
 		},
 		_createEncodingCommand: function() {
 			var that = this;

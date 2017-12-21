@@ -132,7 +132,7 @@ define([
 					this.maximumEditorTabsTextfield.show();
 
 					// Enable debugger.
-					if (generalPrefs.enableDebuggerVisible) {
+					if (generalPrefs.enableDebuggerVisible || util.isElectron) {
 						this.debuggerSubsection.show();
 						this.enableDebuggerCheckbox.setSelection(generalPrefs.enableDebugger);
 						this.enableDebuggerCheckbox.show();

@@ -211,7 +211,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 						if ( userInfo.GitSelectAll ) {
 							this.gitAlwaysSelect[0].setChecked(userInfo.GitSelectAll);
 						}
-						if ( userInfo.GitRepoDirEnabled ) {
+						if ( userInfo.GitRepoDirEnabled || util.isElectron) {
 							this.gitSection4.show();
 							this.gitRepoDir[0].show();
 						}

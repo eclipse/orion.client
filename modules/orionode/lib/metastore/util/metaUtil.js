@@ -69,8 +69,8 @@ module.exports.getSeparator = function (){
 module.exports.getWorkspaceMeta = function (workspaceIds, store, workspaceRoot){
 	var workspaceInfos = [];
 	return new Promise(function(fulfill, reject){
-		async.each(workspaceIds, 
-			function(workspaceId, cb){
+		async.series(workspaceIds.map(function(workspaceId){
+			return function(cb) {
 				if(typeof workspaceId !== "string"){
 					workspaceId = workspaceId.id; // workspaceId is mongo object.
 				}
@@ -87,13 +87,13 @@ module.exports.getWorkspaceMeta = function (workspaceIds, store, workspaceRoot){
 					}
 					return cb();
 				});
-			}, 
-			function(err) {
-				if(err){
-					return reject(err);
-				}
-				return fulfill();
-			});
+			};
+		}),function(err){
+			if(err){
+				return reject(err);
+			}
+			return fulfill();
+		});
 	}).then(function(){
 		return workspaceInfos;
 	})

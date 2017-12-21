@@ -134,7 +134,9 @@ define([
             confParams.remoteRoot = confParams.remoteRoot || '';
             confParams.launchArguments = confParams.launchArguments || {};
             var rootReg = '^' + confParams.remoteRoot.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
-            confParams.launchArguments = replaceInObject(confParams.launchArguments, confParams.remoteRoot, '${workspaceRoot}');
+            if(confParams.remoteRoot){
+                confParams.launchArguments = replaceInObject(confParams.launchArguments, confParams.remoteRoot, '${workspaceRoot}');
+            }
             return new Deferred().resolve();
         } else {
             // Create
@@ -208,7 +210,12 @@ define([
         conf.Parameters.debugServer = lib.$('#debug-server-input').value;
         conf.Parameters.remoteRoot = lib.$('#remote-root-input').value.replace(/\/$/, '');
         conf.Parameters.type = lib.$('#debug-adapter-type-select').value;
-        conf.Parameters.launchArguments = replaceInObject(JSON.parse(editor.getText()), '${workspaceRoot}', conf.Parameters.remoteRoot);
+        if(conf.Parameters.remote){
+            conf.Parameters.launchArguments = replaceInObject(JSON.parse(editor.getText()), '${workspaceRoot}', conf.Parameters.remoteRoot);	
+        }else{
+            conf.Parameters.launchArguments = JSON.parse(editor.getText());
+        }
+        
         var message = {
             CheckState: true,
             ToSave: conf
@@ -241,7 +248,7 @@ define([
         // Render editor
         if (!confParams.launchArguments) {
             confParams.launchArguments = {
-                "program": "${workspaceRoot}/program",
+                "program": "${workspaceRoot}/server.js",
                 "cwd": "${workspaceRoot}"
             };
         }

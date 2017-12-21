@@ -20,7 +20,7 @@ var CONNECTION_TIMEOUT = 10000;
  * @param {Map.<string, DebugAdapter>} adapterPool
  * @return {function}
  */
-module.exports = function createDebugServer(adapterPool) {
+module.exports = function createDebugServer(adapterPool, options) {
     return function(socket) {
         var connectionId;
         do {
@@ -85,6 +85,8 @@ module.exports = function createDebugServer(adapterPool) {
                 return;
             }
             try {
+                request.arguments.cwd && (request.arguments.cwd = request.arguments.cwd.replace("${workspaceRoot}",options.workspaceDir));
+                request.arguments.program && (request.arguments.program = request.arguments.program.replace("${workspaceRoot}",options.workspaceDir));
                 adapter.sendRequest(request.command, request.arguments, CONNECTION_TIMEOUT, function(response) {
                     if (callback) {
                         callback(response);

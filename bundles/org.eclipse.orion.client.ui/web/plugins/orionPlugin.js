@@ -23,6 +23,7 @@ define([
 	"plugins/webEditingPlugin",
 	"profile/userservicePlugin",
 	"plugins/helpPlugin",
+	"plugins/workspacePreferencesPlugin"
 ], function(PluginProvider, authForm) {
 	
 	var plugins = Array.prototype.slice.call(arguments);

@@ -72,6 +72,14 @@ function redrawButtons() {
 	};
 }
 
+function closeNoneEditTabs(){
+	var tabbuttons = document.querySelectorAll(".tabItem");
+	for (var j = 0; j < tabbuttons.length; j++) {
+		if(tabbuttons[j].firstChild && tabbuttons[j].firstChild.currentSrc.indexOf("edit") === -1){ //Close all non edit tabs
+			tabbuttons[j].lastChild.click();
+		}
+	}
+}
 function closeAllTabs(){
 	var tabbuttons = document.querySelectorAll(".tabItem");
 	for (var j = 0; j < tabbuttons.length; j++) {
@@ -260,7 +268,6 @@ function load() {
 		}, 50);
 	});
 	registerContextMenu();
-	collectTabsUrl();
 }
 
 function registerElectronMenu(pageControlCallbacks){
@@ -292,11 +299,22 @@ function registerElectronMenu(pageControlCallbacks){
 	Menu.setApplicationMenu(menu);
 }
 
+/**
+ * @name bindfocus
+ * @description Used in electron.js, used to put focus on active tab.
+ */
 function bindfocus(){
 	getActiveTab().focus();
 }
 
-function createTab(url) {
+/**
+ * @name createTab
+ * @description description
+ * @param url
+ * @param {boolean}doNotOpen To click this tab after creation to open it or not
+ * @returns returns
+ */
+function createTab(url, doNotOpen) {
 	var iframes = document.querySelectorAll(".tabContent");
 	var urlSegs = url.split("#");
 	var potentialExsitingIframe = Array.prototype.find.call(iframes,function(iframe){
@@ -353,7 +371,7 @@ function createTab(url) {
 				var activeClassName = "context-menu-items-open";
 				menu.classList.remove(activeClassName);
 			});
-			if(isInitiatingWorkspace){
+			if(isInitiatingWorkspace && !doNotOpen){
 				var tabbuttons = document.querySelectorAll(".tabItem");
 				tabbuttons[activeIndex] && tabbuttons[activeIndex].click();
 				isInitiatingWorkspace = false;
@@ -362,7 +380,10 @@ function createTab(url) {
 		document.body.appendChild(iframe);
 		var srcUrl = nodeUrl.parse(url);
 		if(srcUrl.pathname === "/" || srcUrl.pathname.endsWith(".html")){
-			addNewTab(id, iframe).click();
+			var newTab = addNewTab(id, iframe)
+			if(!doNotOpen){
+				newTab.click();
+			}
 		}else{
 			needToCleanFrames.push(iframe);
 		}
@@ -374,6 +395,11 @@ function clickTab(id){
 	var correspondingTab = document.querySelector('#'+correspondingTabId);
 	correspondingTab.click();
 }
+/**
+ * @name setActiveIndex
+ * @description Used in electron.js, to set active tab index
+ * @param index
+ */
 function setActiveIndex(index){
 	isInitiatingWorkspace = true;
 	activeIndex = index;
@@ -475,18 +501,4 @@ function getPosition(e) {
 		x: posx,
 		y: posy
 	};
-}
-function collectTabsUrl(){
-	var ipcRenderer = electron.ipcRenderer;
-	ipcRenderer.on('collect-tabs-info',function(event, arg){
-		var iframes = document.querySelectorAll(".tabContent");
-		var activeTabIndex = 0;
-		var tabUrls = Array.prototype.map.call(iframes,function(iframe,index){
-			if(iframe.classList.contains("active")){
-				activeTabIndex = index;
-			}
-			return iframe.contentWindow.location.href.replace(/http:\/\/localhost:\w+\//, "");
-		});
-		ipcRenderer.send("collected-tabs-info-" + arg, tabUrls, activeTabIndex);
-	});
 }

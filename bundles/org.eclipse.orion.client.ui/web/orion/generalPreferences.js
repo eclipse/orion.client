@@ -31,8 +31,8 @@ define([
 		enableFolderCreationAtRoot: false,
 		enableProjectCreation: true,
 		enableLinkProjectCreation: true,
-		enableRefreshButton: false,
-		enableDebugger: false
+		enableRefreshButton: util.isElectron ? true: false,
+		enableDebugger: util.isElectron ? true: false
 	};
 
 	function GeneralPreferences(preferences, callback) {

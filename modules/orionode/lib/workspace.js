@@ -32,7 +32,6 @@ module.exports = function(options) {
 	router.use(responseTime({digits: 2, header: "X-Workspace-Response-Time", suffix: true}))
 	router.get('*', getWorkspace);
 	router.post('*', postWorkspace);
-	router.put('*', putWorkspace);
 	router.delete('*', deleteWorkspace);
 	return router;
 
@@ -41,7 +40,12 @@ module.exports = function(options) {
 		var workspaceLocation = api.join(workspaceRoot, workspace.id);
 		var parentFileLocation = api.join(fileRoot, workspace.id);
 		var store = fileUtil.getMetastore(req);
-		var workspaceDir = store.getWorkspaceDir(workspace.id);
+		var workspaceDir;
+		if(typeof workspace.location === 'string'){
+			workspaceDir = workspace.location;
+		} else {
+			workspaceDir = fileUtil.getMetastore(req).getWorkspaceDir(workspace.id);
+		}
 		return fileUtil.getChildren(store, parentFileLocation, workspaceLocation, workspaceDir, workspaceDir, 1)
 		.then(function(children) {
 			children.forEach(function(child) {
@@ -72,6 +76,17 @@ module.exports = function(options) {
 			return workspaceJson;
 		});
 	}
+	
+	function sendWorkspaceChangedEvent(workspace, update) {
+		var isElectron = options.configParams.get("isElectron");
+		if(isElectron && workspace.location){
+			var originalWorkspace = options.workspaceDir;
+			options.workspaceDir = workspace.location;
+			if(workspace.location !== originalWorkspace){
+				api.getOrionEE().emit("workspace-changed", [workspace.id, update]);
+			}
+		}
+	}
 
 	function getWorkspace(req, res) {
 		var rest = req.params["0"].substring(1);
@@ -101,6 +116,7 @@ module.exports = function(options) {
 				return writeError(404, res, "Workspace not found: " + rest);
 			}
 			getWorkspaceJson(req, workspace).then(function(workspaceJson){
+				sendWorkspaceChangedEvent(workspace, true);
 				api.writeResponse(null, res, null, workspaceJson, true);
 			});
 		});
@@ -117,12 +133,25 @@ module.exports = function(options) {
 			if(typeof workspaceName !== 'string') {
 				return writeError(400, res, "No Name or Slug provided");
 			}
+			var isElectron = options.configParams.get("isElectron");
 			workspaceId = req.body && req.body.Id;
-			store.createWorkspace(userId, {name: workspaceName, id: workspaceId}, function(err, workspace) {
+			var workspaceLocation = req.body && req.body.Location;
+			var workspaceData = {name: workspaceName, id: workspaceId};
+			if (workspaceLocation && (isElectron || options.configParams.get("orion.allow.linked.workspace"))) {
+				workspaceData.location = workspaceLocation;
+			}
+			if(isElectron && workspaceData.name === "Orion Content"){
+				// for Electron, don't create 'Orion Content' workspace, instead use options.workspaceDir as the name and location
+				workspaceData.name = options.workspaceDir;
+				workspaceData.id = "Orion Content";
+				workspaceData.location = options.workspaceDir;
+			}
+			store.createWorkspace(userId, workspaceData, function(err, workspace) {
 				if (err) {
 					return writeError(singleUser ? 403 : 400, res, err);
 				}
 				getWorkspaceJson(req, workspace).then(function(workspaceJson) {
+					sendWorkspaceChangedEvent(workspace, false);
 					return api.writeResponse(201, res, null, workspaceJson, true);
 				}).catch(function(err) {
 					api.writeResponse(400, res, null, err);
@@ -157,30 +186,25 @@ module.exports = function(options) {
 		}
 	}
 
-	function putWorkspace(req, res) {
-		if (req.body.Location && singleUser) {
-			var originalLocation = options.workspaceDir;
-			options.workspaceDir = req.body.Location;
-			api.getOrionEE().emit("workspace-changed",[req.body.Location,originalLocation]);
-			return writeResponse(200, res);
-		}
-		return writeError(403, res);
-	}
-
 	function deleteWorkspace(req, res) {
 		var rest = req.params["0"].substring(1);
 		var file = fileUtil.getFile(req, rest);
 		var store = fileUtil.getMetastore(req);
-		store.deleteWorkspace(file.workspaceId, function(err) {
+		store.deleteWorkspace(file.workspaceId, function(err, isToDeleteWorkspace) {
 			if (err) {
 				return writeError(singleUser ? 403 : 400, res, err);
 			}
-			fileUtil.rumRuff(file.workspaceDir, function(err) {
-				if (err) {
-					return writeError(400, res, err);
-				}
+			if(!isToDeleteWorkspace){
+				fileUtil.rumRuff(file.workspaceDir, function(err) {
+					if (err) {
+						return writeError(400, res, err);
+					}
+					return writeResponse(204, res);
+				});
+			} else {
+				// In electron case, don't realy remove the directory when deleting a workspace.
 				return writeResponse(204, res);
-			});
+			}
 		});
 	}
 };

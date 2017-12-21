@@ -57,6 +57,7 @@ define([
 	'orion/bidiUtils',
 	'orion/customGlobalCommands',
 	'orion/generalPreferences',
+	'orion/workspaceTabPreferences',
 	'orion/breadcrumbs',
 	'orion/keyBinding',
 	'orion/urlModifier',
@@ -68,7 +69,7 @@ define([
 	mTextModelFactory, mUndoStack,
 	mFolderView, mEditorView, mPluginEditorView , mMarkdownView, mMarkdownEditor,
 	mCommandRegistry, mContentTypes, mFileClient, mFileCommands, mEditorCommands, mSelection, mStatus, mProgress, mOperationsClient, mGitClient, mSshTools, mOutliner, mDialogs, mExtensionCommands, ProjectCommands, mSearchClient,
-	EventTarget, URITemplate, i18nUtil, PageUtil, util, objects, lib, Deferred, mProjectClient, mSplitter, mTooltip, mContextMenu, mMenuBar, bidiUtils, mCustomGlobalCommands, mGeneralPrefs, mBreadcrumbs, mKeyBinding, urlModifier,
+	EventTarget, URITemplate, i18nUtil, PageUtil, util, objects, lib, Deferred, mProjectClient, mSplitter, mTooltip, mContextMenu, mMenuBar, bidiUtils, mCustomGlobalCommands, mGeneralPrefs, mWorkspaceTabPrefs, mBreadcrumbs, mKeyBinding, urlModifier,
 	mBreakpoint, mAnnotations, mDebugService
 ) {
 
@@ -267,6 +268,8 @@ function TabWidget(options) {
 	this.selectedFile = null;
 	this.tabWidgetContextItemindex = 1;
 	this.commandRegistry = options.commandRegistry;
+	this.preferences = options.preferences;
+	this.workspaceTabPrefs = new mWorkspaceTabPrefs.WorkspaceTabPreferences(this.preferences);
 	
 	this.fileList = [];
 	this.editorTabs = {};
@@ -300,12 +303,9 @@ function TabWidget(options) {
 	tabWidgetDropdownNode.setAttribute("aria-haspopup", "true");
 
 	this.parent.appendChild(tabWidgetDropdownNode);
-
 	if (this.enableEditorTabs) {
 		this.createDropdown_();
 	}
-	
-	this.restoreTabsFromStorage(); // have to be after createDropdown_ call.
 }
 
 TabWidget.prototype = {};
@@ -344,7 +344,15 @@ objects.mixin(TabWidget.prototype, {
 		}
 		return metadata;
 	},
-	closeTab: function(metadata, isDirty) {
+	closeAllToRemoveTabs: function() {
+		this.toRemoveTabsFileList.forEach(function(file){
+			this.closeTab(file.metadata, false, true);
+		}.bind(this));
+	},
+	recordToCloseTabs: function (){
+		this.toRemoveTabsFileList = objects.clone(this.fileList);
+	},
+	closeTab: function(metadata, isDirty, notStoringCurrentStatus) {
 		if (!this.editorTabs.hasOwnProperty(metadata.Location)) {
 			return;
 		}
@@ -353,7 +361,7 @@ objects.mixin(TabWidget.prototype, {
 		var href = editorTab.href;
 
 		var tabClose = function() {
-			this.removeTab(metadata);
+			this.removeTab(metadata, notStoringCurrentStatus);
 			var evt = {
 				type: "TabClosed",
 				resource: metadata.Location
@@ -402,6 +410,7 @@ objects.mixin(TabWidget.prototype, {
 				}
 
 				var newTab = this.addTab(evt.beingDragged.metadata, evt.beingDragged.href);
+				this.setTabStorage();
 				evt.beingDragged.parent.removeTab(evt.beingDragged.metadata);
 
 				// add the hidden property to the newly created node.
@@ -450,7 +459,8 @@ objects.mixin(TabWidget.prototype, {
 		}
 	},
 	setTabStorage: function() {
-		var mappedFiles = this.fileList.map(function(f) {
+		var mappedFiles = [];
+		this.fileList.forEach(function(f) {
 			if (!f.metadata.Directory) {
 				var parents = f.metadata.Parents.map(function(each){
 					return {
@@ -460,24 +470,35 @@ objects.mixin(TabWidget.prototype, {
 						WorkspaceLocation: each.WorkspaceLocation
 					};
 				});
-				return {metadata: {Location: f.metadata.Location, Name: f.metadata.Name, WorkspaceLocation: f.metadata.WorkspaceLocation, Directory: f.metadata.Directory, Parents: parents}, href: f.href, isTransient: f.isTransient};
+				var fileInfo = {metadata: {Location: f.metadata.Location, Name: f.metadata.Name, WorkspaceLocation: f.metadata.WorkspaceLocation, Directory: f.metadata.Directory, Parents: parents}, checked:f.checked, href: f.href, isTransient: f.isTransient};
+				mappedFiles.push(fileInfo);
 			}
 		});
-		sessionStorage["editorTabs_" + this.id] = JSON.stringify(mappedFiles);
+		if(mappedFiles && mappedFiles.length > 0) {
+			this.workspaceTabPrefs.setPrefs(mappedFiles);
+		}
 	},
-	restoreTabsFromStorage: function() {
-		if (sessionStorage.hasOwnProperty("editorTabs_" + this.id)) {
-			try {
-				var cachedTabs = JSON.parse(sessionStorage["editorTabs_" + this.id]);
-				cachedTabs.reverse().forEach(function(cachedTab) {
+	restoreTabsFromWSPrefs: function(callbackWhenNoTabPrefs) {
+		this.workspaceTabPrefs.getPrefs().then(function(prefs){
+			if(prefs && prefs.length > 0) {
+				var isLocationSet = false;
+				prefs.reverse().forEach(function(cachedTab) {
 					if (cachedTab) {
 						this.addTab(cachedTab.metadata, cachedTab.href, true, cachedTab.isTransient);
+						if(cachedTab.checked){
+							isLocationSet = true;
+							this.setWindowLocation(cachedTab.href);
+						}
 					}
 				}.bind(this));
-			} catch (e) {
-				delete sessionStorage["editorTabs_" + this.id];
+				if(!isLocationSet){
+					this.setWindowLocation(prefs[0].href);
+				}
+				this.closeAllToRemoveTabs();
+			} else {
+				callbackWhenNoTabPrefs();
 			}
-		}
+		}.bind(this));
 	},
 	registerAdditionalCommands: function() {
 		var showTabDropdown = new mCommands.Command({
@@ -702,6 +723,7 @@ objects.mixin(TabWidget.prototype, {
 			// Add the file to our dropdown menu
 			this.fileList.unshift(fileToAdd);
 		} else if (!isRestoreTabsFromStorage && this.transientTab){
+		// Change transientTab when it's exist (delete and create a new one)
 			this.transientTab.fileNameNode.textContent = metadata.Name;
 			fileToAdd = {
 				callback: this.widgetClick,
@@ -713,14 +735,14 @@ objects.mixin(TabWidget.prototype, {
 			};
 			for (var i = 0; i < this.fileList.length; i++) {
 				if (this.fileList[i].isTransient) {
-					this.fileList.splice(i, 1)
+					this.fileList.splice(i, 1);
 					this.fileList.unshift(fileToAdd);
 					var transientTab = this.editorTabs[this.transientTab.location];
 					delete this.editorTabs[this.transientTab.location];
 					transientTab.editorTabNode.metadata = metadata;
 					transientTab.editorTabNode.href = href;
 					transientTab.closeButtonNode.metadata = metadata;
-					transientTab.location = metadata.Location
+					transientTab.location = metadata.Location;
 					transientTab.href = href;
 					transientTab.breadcrumb.destroy();
 					this.createNewBreadCrumb(transientTab, metadata);
@@ -756,7 +778,7 @@ objects.mixin(TabWidget.prototype, {
 			this.fileList.unshift(fileToAdd);
 		}
 		if(this.potentialTransientHref){
-			// In the case doubleclick event reveived before the transient tab is created, 
+			// In the case doubleclick event received before the transient tab is created, 
 			this.transientToPermanent(this.potentialTransientHref);
 			this.potentialTransientHref = null;
 		}
@@ -783,10 +805,9 @@ objects.mixin(TabWidget.prototype, {
 		} else {
 			editorTab.closeButtonNode.style.display = "none";
 		}
-		this.setTabStorage();
 		return editorTab;
 	},
-	removeTab: function(metadata) {
+	removeTab: function(metadata, notStoringCurrentStatus) {
 		// Currently there is no support for an editor to be opened that does not have
 		// an associated file.
 		if (this.fileList.length === 1) {
@@ -825,7 +846,9 @@ objects.mixin(TabWidget.prototype, {
 			this.activateEditorViewer();
 			this.setWindowLocation(this.selectedFile.href);
 		}
-		this.setTabStorage();
+		if(!notStoringCurrentStatus) {
+			this.setTabStorage();
+		}
 	},
 	scrollToTab: function(tab) {
 		var sib = tab.previousSibling;
@@ -1056,6 +1079,7 @@ objects.mixin(EditorViewer.prototype, {
 		this.tabWidget = new TabWidget({
 			parent: this.headerNode,
 			commandRegistry: this.commandRegistry,
+			preferences: this.preferences,
 			id: this.id,
 			fileClient: this.fileClient,
 			generalPreferences: this.generalPreferences,
@@ -1124,45 +1148,71 @@ objects.mixin(EditorViewer.prototype, {
 			var metadata = evt.metadata;
 			if (metadata) {
 				var tabHref = this.activateContext.computeNavigationHref(evt.metadata);
-				var lastFile = PageUtil.hash();
-				if (lastFile  === "#" + metadata.Location){
-					sessionStorage.lastFile = lastFile;
-				}
+			}
+			var workspaceId = evt.metadata.Id || (inputManager.getWorkspace() && inputManager.getWorkspace().Id);
+			if(typeof this.tabWidget.workspaceTabPrefs.getWorkspaceId() === 'undefined') {
+				doTabRestoration.bind(this)();
+			} else if(evt.metadata.hasOwnProperty("Projects") && this.tabWidget.workspaceTabPrefs.getWorkspaceId() !== workspaceId){
+				doTabRestoration.bind(this)();
+				return;
+			} else if(metadata) {
+				this.tabWidget.workspaceTabPrefs.setWorkspaceId(workspaceId);
 				this.tabWidget.addTab(metadata, tabHref);
-			} else {
-				delete sessionStorage.lastFile;
+				this.tabWidget.setTabStorage();
 			}
-			var view = this.getEditorView(evt.input, metadata);
-			this.setEditor(view ? view.editor : null);
-			this.addAnnotationsFromDebugService();
-			this.updateDirtyIndicator();
-			evt.editor = this.editor;
-			this.pool.metadata = metadata;
-			
-			var editorView = this.getCurrentEditorView();
-			if (editorView && editorView.editor) {
-				this.editor.isFileInitiallyLoaded = false;
-				var textView = editorView.editor.getTextView();
-				textView.addEventListener("ModelChanged", function(){
-					if(this.editor.isFileInitiallyLoaded){
-						if(this.tabWidget.transientTab && this.tabWidget.transientTab.location === this.pool.metadata.Location){
-							this.tabWidget.transientToPermanent(this.tabWidget.transientTab.href);
-						}
-					}
+			doOperation.bind(this)();
+			function doTabRestoration(){
+				this.tabWidget.recordToCloseTabs();
+				this.tabWidget.workspaceTabPrefs.setWorkspaceId(workspaceId);
+				this.tabWidget.restoreTabsFromWSPrefs(function(){
+					// This is when there are no tabs to restore
+					this.tabWidget.addTab(metadata, tabHref);
+					this.tabWidget.closeAllToRemoveTabs();
+					doOperation.bind(this)();
 				}.bind(this));
-				var flagInitialLoad = function(evt){
-						if(typeof evt.contentsSaved === "undefined"){
-							this.editor.isFileInitiallyLoaded = true; 
-						}
-						this.editor.removeEventListener("InputChanged", flagInitialLoad);
-					}.bind(this);
-				this.editor.addEventListener("InputChanged", flagInitialLoad);
 			}
-			
-			if (this.shown) {
-				var href = window.location.href;
-				this.activateContext.setActiveEditorViewer(this);
-				this.commandRegistry.processURL(href);
+			function doOperation(){
+				if (metadata) {
+					var lastFile = PageUtil.hash();
+					if (lastFile  === "#" + metadata.Location){
+						sessionStorage.lastFile = lastFile;
+					}
+				} else {
+					delete sessionStorage.lastFile;
+				}
+				var view = this.getEditorView(evt.input, metadata);
+				this.setEditor(view ? view.editor : null);
+				this.addAnnotationsFromDebugService();
+				this.updateDirtyIndicator();
+				evt.editor = this.editor;
+				this.pool.metadata = metadata;
+				
+				var editorView = this.getCurrentEditorView();
+				
+				if (editorView && editorView.editor) {
+					this.editor.isFileInitiallyLoaded = false;
+					var textView = editorView.editor.getTextView();
+					textView.addEventListener("ModelChanged", function(){
+						if(this.editor.isFileInitiallyLoaded){
+							if(this.tabWidget.transientTab && this.tabWidget.transientTab.location === this.pool.metadata.Location){
+								this.tabWidget.transientToPermanent(this.tabWidget.transientTab.href);
+							}
+						}
+					}.bind(this));
+					var flagInitialLoad = function(evt){
+							if(typeof evt.contentsSaved === "undefined"){
+								this.editor.isFileInitiallyLoaded = true; 
+							}
+							this.editor.removeEventListener("InputChanged", flagInitialLoad);
+						}.bind(this);
+					this.editor.addEventListener("InputChanged", flagInitialLoad);
+				}
+				
+				if (this.shown) {
+					var href = window.location.href;
+					this.activateContext.setActiveEditorViewer(this);
+					this.commandRegistry.processURL(href);
+				}
 			}
 		}.bind(this));
 		inputManager.addEventListener("InputChanging", function(e) { //$NON-NLS-0$

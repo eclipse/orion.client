@@ -67,6 +67,9 @@ var createUserAccess = function(UserId){
  * methodMask is either POST=1,PUT=2,GET=4,DELETE=8
  */
 var checkRights = function (userId, uri, req, res, next, method){
+	if(userId === "anonymous"){
+		return done(true);
+	}
 	var	methodMask = getMethod(method || req.method);
 	if (uri === "/workspace"){
 		return done(true);

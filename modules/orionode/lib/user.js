@@ -395,6 +395,9 @@ module.exports.router = function(options) {
 		if (options.configParams.get("orion.auth.user.creation") && !isAdmin(req.user && req.user.username)) {
 			return api.writeResponse(403, res);
 		}
+		if(req.body.UserName === "anonymous"){
+			api.writeError(400, res, "User name can not be anonymous");
+		}
 		var userData = {
 			username: req.body.UserName,
 			email: req.body.Email,

@@ -51,7 +51,7 @@ if (clusterParam) {
 
 var homeDir = os.homedir();
 if (process.versions.electron) {
-	var logPath = path.join(homeDir, '.orion', 'orion.log');
+	var logPath = path.join(homeDir, '.orionElectron', 'orion.log');
 	if(process.platform === 'darwin'){
 		logPath = path.join(homeDir, '/Library/Logs/Orion', 'orion.log');
 	}else if(process.platform === 'linux'){
@@ -77,7 +77,7 @@ function startServer(cb) {
 	if (workspaceArg) {
 		workspaceDir = path.resolve(process.cwd(), workspaceArg);
 	} else if (configParams.get("isElectron")) {
-		workspaceDir =  path.join(homeDir, '.orion', '.workspace');
+		workspaceDir =  path.join(homeDir, '.orionElectron', '.workspace');
 	} else {
 		workspaceDir = path.join(__dirname, '.workspace');
 	}

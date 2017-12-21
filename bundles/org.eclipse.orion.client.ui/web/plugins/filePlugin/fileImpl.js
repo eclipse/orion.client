@@ -234,10 +234,13 @@ define(["orion/Deferred", "orion/xhr", "orion/URL-shim", "orion/operation", "ori
 		 * passed as a parameter to the provided onCreate function.
 		 * @param {String} _name The name of the new workspace
 		 */
-		createWorkspace: function(_name, id) {
+		createWorkspace: function(_name, id, location) {
 			//return the deferred so client can chain on post-processing
 			var data = {};
 			data.Id = id;
+			if(typeof location === 'string'){
+				data.Location = location;
+			}
 			return _xhr("POST", this.workspaceBase, {
 				headers: {
 					"Orion-Version": "1",

@@ -137,6 +137,76 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 			return this._service.remove(namespace, key);
 		}
 	};
+	
+	function WorkspacePreferencesProvider(serviceRegistry, workspaceId) {
+		this._currentPromises = {};
+		this._cache = new Cache("/orion/preferences/workspace", 60*60); //$NON-NLS-0$
+		this._workspaceId = workspaceId;
+		
+		this._service = null;
+		this.available = function() {
+			if (!this._service) {
+				var references = serviceRegistry.getServiceReferences("orion.core.workspacePreference.provider"); //$NON-NLS-0$
+				if (references.length > 0) {
+					this._service = serviceRegistry.getService(references[0]);
+				}
+			}
+			return !!this._service;
+		};
+	}
+
+	WorkspacePreferencesProvider.prototype = {
+		get: function(namespace, optForce) {
+			namespace = this._workspaceId + namespace;
+			if (this._currentPromises[namespace]) {
+				return this._currentPromises[namespace];
+			}
+			var d = new Deferred();
+			var cached = null;
+			if (optForce) {
+				this._cache.remove(namespace);
+			} else {
+				cached = this._cache.get(namespace);
+			}
+			if (cached !== null) {
+				d.resolve(cached);
+			} else {
+				this._currentPromises[namespace] = d;
+				var that = this;
+				this._service.get(namespace).then(function(data) {
+					data = data || {};
+					that._cache.set(namespace, data);
+					delete that._currentPromises[namespace];
+					d.resolve(data);
+				}, function (error) {
+					if (error.status === 404 || error.status === 410) {
+						var data = {};
+						that._cache.set(namespace, data);
+						delete that._currentPromises[namespace];
+						d.resolve(data);
+					} else  {
+						delete that._currentPromises[namespace];
+						d.resolve(that._cache.get(namespace, true) || {});
+					}
+				});
+			}
+			return d;
+		},
+		
+		put: function(namespace, data) {
+			namespace = this._workspaceId + namespace;
+			this._cache.set(namespace, data);
+			return this._service.put(namespace, data);
+		},
+		
+		remove: function(namespace, key){
+			namespace = this._workspaceId + namespace;
+			var cached = this._cache.get(namespace);
+			delete cached[key];
+			this._cache.set(namespace, cached);
+			return this._service.remove(namespace, key);
+		}
+	};
 
 	function DefaultPreferencesProvider(_location) {
 		_location = _location || "defaults.pref"; //$NON-NLS-0$
@@ -277,7 +347,9 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 	function PreferencesService(serviceRegistry, options) {
 		options = options || {};
 		this._changeListeners = [];
+		this.serviceRegistry = serviceRegistry;
 		this._userProvider = options.userProvider || new UserPreferencesProvider(serviceRegistry);
+		this._workspaceProvider;
 		this._localProvider = options.localProvider || new LocalPreferencesProvider();
 		this._defaultsProvider = options.defaultsProvider || new DefaultPreferencesProvider(options.defaultPreferencesLocation);
 		_EventTarget.attach(this);
@@ -287,7 +359,7 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 			if (!key || key.indexOf(prefix) !== 0) return;
 			var index = key.indexOf("/", prefix.length);
 			var namespace = key.substring(index);
-			var scope = {"default": PreferencesService.DEFAULT_SCOPE, local: PreferencesService.LOCAL_SCOPE, user: PreferencesService.USER_SCOPE}[key.substring(prefix.length, index)];
+			var scope = {"default": PreferencesService.DEFAULT_SCOPE, local: PreferencesService.LOCAL_SCOPE, user: PreferencesService.USER_SCOPE, workspace: PreferencesService.WORKSPACE_SCOPE}[key.substring(prefix.length, index)];
 			this.dispatchEvent(new PreferencesEvent("changed", namespace, scope)); //$NON-NLS-1$
 		}.bind(this), false);
 		this._serviceRegistration = serviceRegistry.registerService("orion.core.preference", this); //$NON-NLS-0$
@@ -296,6 +368,7 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 	PreferencesService.DEFAULT_SCOPE = 1;
 	PreferencesService.LOCAL_SCOPE = 2;
 	PreferencesService.USER_SCOPE = 4;
+	PreferencesService.WORKSPACE_SCOPE = 8;
 	
 	PreferencesService.prototype = /** @lends orion.preferences.PreferencesService.prototype */ {
 
@@ -326,7 +399,7 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 		 */
 		get: function(namespace, key, options) {
 			options = options || {};
-			var providers = this._getProviders(options.scope);
+			var providers = this._getProviders(options);
 			var gets = [];
 			providers.reverse().forEach(function(provider) {
 				gets.push(provider.get(namespace, options.noCache));
@@ -376,7 +449,7 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 		put: function(namespace, data, options) {
 			var that = this;
 			options = options || {};
-			var provider = this._getProviders(options.scope)[0];
+			var provider = this._getProviders(options)[0];
 			return provider.get(namespace).then(function(store) {
 				var newStore = data;
 				if (!options.clear) {
@@ -403,7 +476,7 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 		 */
 		remove: function(namespace, key, options) {
 			options = options || {};
-			var provider = this._getProviders(options.scope)[0];
+			var provider = this._getProviders(options)[0];
 			return provider.get(namespace).then(function(store) {
 				function deleteKey(key) {
 					if (key in store) {
@@ -426,8 +499,9 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 		/**
 		 * @private
 		 */
-		_getProviders: function(optScope) {
-			if (!optScope || typeof(optScope) !== "number" || optScope > 7 || optScope < 1) { //$NON-NLS-0$
+		_getProviders: function(options) {
+			var optScope = options.scope;
+			if (!optScope || typeof(optScope) !== "number" || optScope > 8 || optScope < 1) { //$NON-NLS-0$
 				optScope = PreferencesService.DEFAULT_SCOPE;
 				optScope |= this._userProvider.available() ? PreferencesService.USER_SCOPE : PreferencesService.LOCAL_SCOPE;
 			}
@@ -440,6 +514,12 @@ define(['require', 'orion/Deferred', 'orion/EventTarget', 'orion/xhr'], function
 			}
 			if (PreferencesService.DEFAULT_SCOPE & optScope) {
 				providers.push(this._defaultsProvider);
+			}
+			if (PreferencesService.WORKSPACE_SCOPE & optScope) {
+				this._workspaceProvider = new WorkspacePreferencesProvider(this.serviceRegistry, options.workspaceId);
+				if(this._workspaceProvider.available()) {
+					providers.push(this._workspaceProvider);
+				}
 			}
 			return providers;
 		},

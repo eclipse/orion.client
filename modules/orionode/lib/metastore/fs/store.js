@@ -36,7 +36,8 @@ var DESCRIPTION_METASTORE = "This JSON file is at the root of the Orion metadata
 var VERSION = 8;
 
 function getUserRootLocation(options, userId) {
-	return options.configParams.get('orion.single.user') ? nodePath.join(options.configParams.get('orion.single.user.metaLocation') || os.homedir(), '.orion') : nodePath.join.apply(null, metaUtil.readMetaUserFolder(options.workspaceDir, userId));
+	var orionMetaFolderName = options.configParams.get("isElectron") ? '.orionElectron' : '.orion';
+	return options.configParams.get('orion.single.user') ? nodePath.join(options.configParams.get('orion.single.user.metaLocation') || os.homedir(), orionMetaFolderName) : nodePath.join.apply(null, metaUtil.readMetaUserFolder(options.workspaceDir, userId));
 }
 
 function getUserMetadataFileName(options, user) {
@@ -49,13 +50,6 @@ function getWorkspaceMetadataFileName(options, workspaceId) {
 	var userId = metaUtil.decodeUserIdFromWorkspaceId(workspaceId);
 	var metadataFolder = getUserRootLocation(options, userId);
 	return nodePath.join(metadataFolder, workspaceId + ".json");
-}
-
-function getWorkspaceFolderName(options, workspaceId) {
-	var workspaceName = metaUtil.decodeWorkspaceNameFromWorkspaceId(workspaceId);
-	var userId = metaUtil.decodeUserIdFromWorkspaceId(workspaceId);
-	var metadataFolder = getUserRootLocation(options, userId);
-	return nodePath.join(metadataFolder, workspaceName);
 }
 
 function getProjectMetadataFileName(options, workspaceId, projectName) {
@@ -97,6 +91,7 @@ function FsMetastore(options) {
 	this._taskList = {};
 	this._lockMap = {};
 	this._isSingleUser = options.configParams.get('orion.single.user');
+	this._isElectron = options.configParams.get("isElectron");
 }
 
 FsMetastore.prototype.lock = function(userId, shared) {
@@ -105,7 +100,8 @@ FsMetastore.prototype.lock = function(userId, shared) {
 		if (!locker) {
 			var filePath;
 			if (this._isSingleUser) {
-				filePath = nodePath.join(this._options.configParams.get('orion.single.user.metaLocation') || os.homedir(), '.orion');
+				var orionMetaFolderName = this._isElectron ? '.orionElectron' : '.orion';
+				filePath = nodePath.join(this._options.configParams.get('orion.single.user.metaLocation') || os.homedir(), orionMetaFolderName);
 			} else {
 				filePath = this._computeLockFilePath(userId);
 			}
@@ -210,7 +206,6 @@ Object.assign(FsMetastore.prototype, {
 					if (error) {
 						return reject(error);
 					}
-		
 					if (metadata) {
 						var workspaceId = metaUtil.encodeWorkspaceId(userId, workspaceData.id || workspaceData.name);
 						var workspaceObj = {
@@ -225,6 +220,10 @@ Object.assign(FsMetastore.prototype, {
 							"UniqueId": workspaceId,
 							"UserId": userId
 						};
+						if(workspaceData.location) {
+							data.ContentLocation = workspaceData.location;
+							workspaceObj.location = workspaceData.location;
+						}
 						this._updateWorkspaceMetadata(workspaceId, data, function(error) {
 							if (error) {
 								return reject(error);
@@ -232,7 +231,7 @@ Object.assign(FsMetastore.prototype, {
 							function updateUserWorkspaceAccessRight(){
 								// Update workspaceIds in user's metadata only if it's new
 								if(metadata.WorkspaceIds.indexOf(workspaceId) === -1){
-									metadata.WorkspaceIds.push(workspaceId);
+									metadata.WorkspaceIds.unshift(workspaceId);// Always put new workspace Id in the begining, mainly to server electron
 									var workspaceUserRights = accessRights.createWorkspaceAccess(workspaceId);
 									metadata.Properties.UserRights = (metadata.Properties.UserRights || accessRights.createUserAccess(userId)).concat(workspaceUserRights);
 									this._updateUserMetadata(userId,  metadata, function(error) {
@@ -240,7 +239,7 @@ Object.assign(FsMetastore.prototype, {
 											return reject(error);
 										}
 										resolve(workspaceObj);
-									});						
+									});
 								} else {
 									resolve(workspaceObj);
 								}
@@ -270,44 +269,42 @@ Object.assign(FsMetastore.prototype, {
 	},
 
 	getWorkspace: function(workspaceId, callback) {
-		if (workspaceId !== WORKSPACE_ID) {
-			var userId = metaUtil.decodeUserIdFromWorkspaceId(workspaceId);
-			Promise.using(this.lock(userId, true), function() {
-				return new Promise(function(resolve, reject) {
-					this._readWorkspaceMetadata(workspaceId, function(error, metadata) {
-						if (error) {
-							return reject(error);
-						}
-						if (!metadata) {
-							return resolve(null);
-						}
-						var workspace = {
-							"id": metadata.UniqueId,
-							"name": metadata.FullName,
-							"properties": {}
-						};
-						// TODO Workspace properties is where tabs info goes, implement later
-						var propertyKeys = Object.keys(metadata.Properties);
-						propertyKeys.forEach(function(propertyKey) {
-							workspace.properties[propertyKey] = metadata.Properties[propertyKey];
-							// TODO password needs to be handled specifically since it needs to be decrypted. (referrence setProperties line 967)
-						});
-						return resolve(workspace);
-					});
-				}.bind(this));
-			}.bind(this)).then(
-				function(result) {
-					callback(null, result);
-				},
-				callback /* error case */
-			);
-		} else {
-			// TODO this should be merged into upper logic
-			callback(null, {
-				name: nodePath.basename(this._options.workspaceDir),
-				id: WORKSPACE_ID
-			});
+		var userId = metaUtil.decodeUserIdFromWorkspaceId(workspaceId);
+		if(!userId) {
+			return callback(new Error("userId invalid"))
 		}
+		Promise.using(this.lock(userId, true), function() {
+			return new Promise(function(resolve, reject) {
+				this._readWorkspaceMetadata(workspaceId, function(error, metadata) {
+					if (error) {
+						return reject(error);
+					}
+					if (!metadata) {
+						return resolve(null);
+					}
+					var workspace = {
+						"id": metadata.UniqueId,
+						"name": metadata.FullName,
+						"properties": {}
+					};
+					if(metadata.ContentLocation){
+						workspace.location = metadata.ContentLocation;
+					}
+					// TODO Workspace properties is where tabs info goes, implement later
+					var propertyKeys = Object.keys(metadata.Properties);
+					propertyKeys.forEach(function(propertyKey) {
+						workspace.properties[propertyKey] = metadata.Properties[propertyKey];
+						// TODO password needs to be handled specifically since it needs to be decrypted. (referrence setProperties line 967)
+					});
+					return resolve(workspace);
+				});
+			}.bind(this));
+		}.bind(this)).then(
+			function(result) {
+				callback(null, result);
+			},
+			callback /* error case */
+		);
 	},
 
 	/** @callback */
@@ -320,6 +317,7 @@ Object.assign(FsMetastore.prototype, {
 						return reject(error);
 					}
 					var projectsToDelete = metadata.ProjectNames;
+					var isWorkspaceHasLocation = typeof metadata.ContentLocation === "string";
 					projectsToDelete.forEach(function(projectname){
 						var metaFile = getProjectMetadataFileName(this._options, workspaceId, projectname);
 						fs.unlinkAsync(metaFile).catchReturn({ code: 'ENOENT' }, null);
@@ -339,7 +337,9 @@ Object.assign(FsMetastore.prototype, {
 								return reject(error);
 							}
 							fs.unlinkAsync(getWorkspaceMetadataFileName(this._options, workspaceId)).catchReturn({ code: 'ENOENT' }, null)
-							.then(resolve, reject);
+							.then(function(){
+								resolve(isWorkspaceHasLocation)
+							}, reject);
 						}.bind(this));				
 					}.bind(this));
 				}.bind(this));
@@ -353,7 +353,7 @@ Object.assign(FsMetastore.prototype, {
 	},
 
 	getWorkspaceDir: function(workspaceId) {
-		if (workspaceId !== WORKSPACE_ID) {
+		if (!this._isSingleUser) {
 			var userId = metaUtil.decodeUserIdFromWorkspaceId(workspaceId);
 			return nodePath.join.apply(null, metaUtil.getWorkspacePath(this._options.workspaceDir, workspaceId, userId));	
 		}
@@ -519,13 +519,15 @@ Object.assign(FsMetastore.prototype, {
 					
 					// userData.properties contains all the properties, not only the ones that are changed, 
 					// because of locking, it's safe to say the properties hasn't been changed by other operations
-					metadata.Properties = userData.properties;
+					userData.properties && (metadata.Properties = userData.properties);
 					// update other userData 
 					userData.fullname && (metadata.FullName = userData.fullname);
 					userData.password && (metadata.Properties.Password = userData.password);  // TODO need to encrypt password
 					userData.email && (metadata.Properties.Email = userData.email);
 					userData.login_timestamp && (metadata.Properties.LastLoginTimestamp = userData.login_timestamp.getTime());
 					userData.username && (metadata.UserName = userData.username);
+					
+					userData.workspaceIds && (metadata.WorkspaceIds = userData.workspaceIds);
 		
 					// TODO update isAuthenticated
 		
@@ -591,6 +593,9 @@ Object.assign(FsMetastore.prototype, {
 	},
 	
 	createRenameDeleteProject: function(workspaceId, projectInfo) {
+		if (this._isElectron) {
+			return Promise.resolve();
+		} 
 		if (!workspaceId) {
 			return Promise.reject(new Error('workspace id is null'));
 		}
