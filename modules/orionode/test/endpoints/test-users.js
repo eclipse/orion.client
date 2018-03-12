@@ -389,7 +389,7 @@ describe("Users endpoint", function() {
 				.set('Orion-Version', 1)
 				.expect(404, done);
 		});
-		it("testCreateDeleteUser - ADMIN", function(done) {
+		it("testCreateDeleteUser", function(done) {
 			var json = {UserName: "u12", Email: 'u12@bar.org', FullName: "u12 Bar", Password: "1234"};
 			request()
 				.post(CONTEXT_PATH + '/users')
@@ -400,6 +400,93 @@ describe("Users endpoint", function() {
 					request()
 						.delete(CONTEXT_PATH + '/users/u12')
 						.expect(200, done) //TODO what to do in single user mode?
+				});
+		});
+		it("testUser", function(done) {
+			var json = {UserName: "get1", Email: 'get1@mail.ca', FullName: "get one", Password: "1234"};
+			request()
+				.post(CONTEXT_PATH + '/users')
+				.send(json)
+				.expect(201)
+				.end(function(err, res) {
+					testHelper.throwIfError(err);
+					request()
+						.get(CONTEXT_PATH + '/users/get1')
+						.expect(200, done);
+				});
+		});
+		it("testGetUserByEmail - email not confirmed", function(done) {
+			var json = {UserName: "get2", Email: 'get2@mail.ca', FullName: "get two", Password: "1234"};
+			request()
+				.post(CONTEXT_PATH + '/users')
+				.send(json)
+				.expect(201)
+				.end(function(err, res) {
+					testHelper.throwIfError(err);
+					request()
+						.post(CONTEXT_PATH + '/useremailconfirmation')
+						.send({Email: "get2@mail.ca"})
+						.expect(400, done) //email is not confirmed, 400 is expected
+				});
+		});
+		it("testGetUserByOauth - no set oauth", function(done) {
+			var json = {UserName: "get3", Email: 'get3@mail.ca', FullName: "get three", Password: "1234", OAuth: "ABCDEF"};
+			request()
+				.post(CONTEXT_PATH + '/users')
+				.send(json)
+				.expect(201)
+				.end(function(err, res) {
+					testHelper.throwIfError(err);
+					request()
+						.put(CONTEXT_PATH + '/users/get3')
+						.send({OAuth: "ABCDEF"})
+						.expect(200)
+						.end((err, res) => {
+							testHelper.throwIfError(err);
+							done();
+						});
+				});
+		});
+		it("testGetUserByOauth - oauth set", function(done) {
+			var json = {UserName: "get4", Email: 'get4@mail.ca', FullName: "get four", Password: "1234", OAuth: "ABCDEF4"};
+			request()
+				.post(CONTEXT_PATH + '/users')
+				.send(json)
+				.expect(201)
+				.end(function(err, res) {
+					testHelper.throwIfError(err);
+					request()
+						.put(CONTEXT_PATH + '/users/get4')
+						.send({OAuth: "ABCDEF4"})
+						.expect(200)
+						.end((err, res) => {
+							testHelper.throwIfError(err);
+							request()
+								.put(CONTEXT_PATH + '/users/get4')
+								.send({OAuth: "ABCDEF4"})
+								.expect(200, done);
+						});
+				});
+		});
+		it("testGetUserByOauth - null sent, remove oauth", function(done) {
+			var json = {UserName: "get5", Email: 'get5@mail.ca', FullName: "get five", Password: "1234", OAuth: "ABCDEF5"};
+			request()
+				.post(CONTEXT_PATH + '/users')
+				.send(json)
+				.expect(201)
+				.end(function(err, res) {
+					testHelper.throwIfError(err);
+					request()
+						.put(CONTEXT_PATH + '/users/get5')
+						.send({OAuth: "ABCDEF5"})
+						.expect(200)
+						.end((err, res) => {
+							testHelper.throwIfError(err);
+							request()
+								.put(CONTEXT_PATH + '/users/get5')
+								.send({OAuth: null})
+								.expect(200, done);
+						});
 				});
 		});
 	});

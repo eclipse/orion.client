@@ -248,7 +248,12 @@ Object.assign(MongoDbMetastore.prototype, {
 			if (err) {
 				return callback(err);
 			}
-			return callback(null, users);
+			let vals = users.slice(start, start+rows),
+				result = [];
+			vals.forEach((val) => {
+				result.push(val.username);
+			})
+			return callback(null, result);
 		});
 	},
 	getUser: function(id, callback) {
@@ -373,10 +378,6 @@ Object.assign(MongoDbMetastore.prototype, {
 			mongooseTask.expires = taskObj.expires;
 		}
 		mongooseTask.cancelable = Boolean(taskObj.cancelable);
-//		if (taskObj.uriUnequalStrategy) {
-//			mongooseTask.uriUnequalStrategy = taskObj.uriUnequalStrategy; // TODO needed?
-//		}
-
 		mongooseTask.save(callback);
 	}
 });

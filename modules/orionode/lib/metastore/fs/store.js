@@ -21,7 +21,8 @@ const nodePath = require('path'),
     fileLocker = require('../../util/fileLocker'),
 	cryptoUtil = require('../../util/cryptoUtil'),
 	passport = require('passport'),
-	LocalStrategy = require('passport-local').Strategy;
+	LocalStrategy = require('passport-local').Strategy,
+	userIndex = require('../util/userIndex');
 
 const FILENAME_METASTORE = "metastore.json",
 	FILENAME_TASKS_TEMP_DIR = "temp",
@@ -83,14 +84,21 @@ function getProjectMetadataFileName(options, workspaceId, projectName) {
 function getTaskRootLocation(options) {
 	return options.configParams.get('orion.file.tasks.location') || nodePath.join(options.workspaceDir, '.metadata', '.tasks');
 }
-
+/**
+ * Write JSON to the given file
+ * @param {string} fileName The name of the file to write to
+ * @param {{?}} object The object to write out
+ */
 function writeJSON(fileName, object) {
 	logger.info("write metadata " + fileName + " pid=" + process.pid);
 	return mkdirpAsync(nodePath.dirname(fileName)).then(function() {
 		return fs.writeFileAsync(fileName, JSON.stringify(object, null, 2) + "\n");
 	});
 }
-
+/**
+ * Read the JSON from the given file
+ * @param {string} fileName The name of the file to read
+ */
 function readJSON(fileName) {
 	logger.info("read metadata " + fileName + " pid=" + process.pid);
 	return fs.readFileAsync(fileName, 'utf8')
@@ -193,7 +201,10 @@ FsMetastore.prototype.setup = function setup(options) {
 				});
 			}.bind(this));
 		}
+
+		this._index = new userIndex(this);
 		metaUtil.initializeAdminUser(options, this);
+
 		/* verify that existing metadata in this workspace will be usable by this server */
 		var path = nodePath.join(options.workspaceDir, FILENAME_METASTORE);
 		fs.readFileAsync(path, 'utf8').then(function(content) {
@@ -521,14 +532,19 @@ Object.assign(FsMetastore.prototype, {
 								emailConfirmed: userJson.emailConfirmed,
 								workspaces:[]
 							});
-						});
+						}.bind(this));
 					}.bind(this));
 				}.bind(this));
 			}.bind(this));
 		}.bind(this)).then(
 			function(result) {
+				if(this._index) {
+					return this._index.createUser(result).then(function() {
+						callback(null, result);
+					});
+				}
 				callback(null, result);
-			},
+			}.bind(this),
 			callback /* error case */
 		);
 	},
@@ -577,27 +593,42 @@ Object.assign(FsMetastore.prototype, {
 					if (error) {
 						return reject(error);
 					}
-					
 					// userData.properties contains all the properties, not only the ones that are changed, 
 					// because of locking, it's safe to say the properties hasn't been changed by other operations
 					metadata.Properties = userData.properties || Object.create(null);
-					userData.fullname && (metadata.FullName = userData.fullname);
-					userData.password && (metadata.Properties.Password = userData.password);  // TODO need to encrypt password
-					userData.email && (metadata.Properties.Email = userData.email);
+					if(userData.fullname) {
+						metadata.FullName = userData.fullname;
+					}
+					if(userData.password){
+						metadata.Properties.Password = cryptoUtil.encrypt(userData.password, "");
+					}
+					if(userData.email) {
+						metadata.Properties.Email = userData.email;
+					}
 					if(userData.login_timestamp) {
 						metadata.Properties.LastLoginTimestamp = userData.login_timestamp;
 						if(typeof userData.login_timestamp.getTime === 'function') {
 							metadata.Properties.LastLoginTimestamp = userData.login_timestamp.getTime();
 						}
 					}
-					userData.username && (metadata.UserName = userData.username);
+					if(userData.username) {
+						metadata.UserName = userData.username;
+					}
+					if(userData.oauth) {
+						metadata.Properties.OAuth = userData.oauth;
+					}
 		
 					this._updateUserMetadata(id, metadata, function(error) {
 						if (error) {
 							return reject(error);
 						}
-						resolve(); // TODO needs to return user data with name, email and authToken for user.sendEmail method.
-					});
+						if(this._index) {
+							return this._index.updateUser(id, metadata).then(() => {
+								resolve(metadata);
+							});
+						}
+						resolve(metadata);
+					}.bind(this));
 				}.bind(this));
 			}.bind(this));
 		}.bind(this)).then(
@@ -627,6 +658,11 @@ Object.assign(FsMetastore.prototype, {
 			rimraf(userLocation, (err) => {
 				if(err) {
 					return callback(err);
+				}
+				if(this._index) {
+					return this._index.deleteUser(id).then(function() {
+						callback();
+					});
 				}
 				callback();
 			});
@@ -659,18 +695,39 @@ Object.assign(FsMetastore.prototype, {
 					callback(err, user ? [user] : user);
 				});
 			}
+			if(this._index) {
+				return this._index.getAllUsers().then((users) => {
+					callback(null, users.slice(start, start+rows));
+				}, (err) => {
+					callback(err);
+				});
+			}
 		}
 		return callback(null, []);
 	},
 	
 	/** @callback */
 	getUserByEmail: function(email, callback) {
-		callback(new Error("Not implemented"));
+		if(this._index) {
+			return this._index.getUserByEmail(email).then((userInfo) => {
+				callback(null, userInfo);
+			}, (err) => {
+				callback(err)
+			});
+		}
+		callback(new Error("There is no user index available."));
 	},
 
 	/** @callback */
 	getUserByOAuth: function(oauth, callback) {
-		callback(new Error("Not implemented"));
+		if(this._index) {
+			return this._index.getUserByOauth(oauth).then((userInfo) => {
+				callback(null, userInfo);
+			}, (err) => {
+				callback(err)
+			});
+		}
+		callback(new Error("There is no user index available."));
 	},
 	
 	/** @callback */

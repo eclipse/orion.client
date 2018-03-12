@@ -71,7 +71,6 @@ function userJSON(user, options) {
 	return {
 		FullName: user.fullname,
 		UserName: user.username,
-		Location: api.join(options.usersRoot, user.username),
 		Email: user.email,
 		EmailConfirmed: emailConfirmed(user),
 		HasPassword: true,
@@ -399,18 +398,27 @@ module.exports.router = function router(options) {
 				if (err) {
 					return api.writeResponse(404, res);
 				}
-				start = Math.min(users.length, start);
-				rows = Math.min(users.length, rows);
-				const end = start + rows,
-					result = [];
-				for (var i = start; i < end; i++) {
-					result.push(userJSON(users[i], options));
+				const result = [];
+				if(Array.isArray(users) || users.length > 0) {
+					return users.forEach((user, index) => {
+						store.getUser(user, function(err, userInfo) {
+							result.push(userJSON(userInfo, options));
+							if(index >= users.length-1) {
+								return api.writeResponse(200, res, null, {
+									Users: result,
+									UsersStart: start,
+									UsersRows: rows,
+									UsersLength: users.length
+								});
+							}
+						});
+					});
 				}
 				return api.writeResponse(200, res, null, {
 					Users: result,
 					UsersStart: start,
 					UsersRows: rows,
-					UsersLength: users.length
+					UsersLength: result.length
 				});
 			});
 		}, function noMetastore(err) {
@@ -458,36 +466,29 @@ module.exports.router = function router(options) {
 					user.email = req.body.Email;
 				}
 				if (typeof req.body.OAuth !== "undefined") {
-					promiseChain = promiseChain.then(function() {
-						return new Promise(function(resolve, reject){
-							store.getUserByOAuth(req.body.OAuth, function(err, existing) {
-								if (err) {
-									reject(err);
-									return;
-								}
-								if (existing && existing.length) {
-									api.writeError(409, res, "This account is already linked to someone else");
-									reject();
-									return;
-								}
-								user.oauth = req.body.OAuth;
-								resolve();
-							});
+					return store.getUserByOAuth(req.body.OAuth, function(err, existing) {
+						if (err) {
+							api.writeError(500, res, err.message);
+							return;
+						}
+						if (existing && (id !== existing.username)) {
+							api.writeError(409, res, "This account is already linked to someone else");
+							return;
+						}
+						user.oauth = req.body.OAuth;
+						return store.updateUser(id, user, function(err) {
+							if (err) {
+								return api.writeError(400, res, "Failed to update: " + id);
+							}
+							return api.writeResponse(200, res);
 						});
 					});
 				}
-				promiseChain.then(function() {
-					store.updateUser(id, user, function(err) {
-						if (err) {
-							return api.writeError(400, res, "Failed to update: " + id);
-						}
-						return api.writeResponse(200, res);
-					});
-				}).catch(function(err) {
+				return store.updateUser(id, user, function(err) {
 					if (err) {
-						// Indicated unhandled error
-						return api.writeError(500, res, "An internal error has occured");
+						return api.writeError(400, res, "Failed to update: " + id);
 					}
+					return api.writeResponse(200, res);
 				});
 			});
 		}, function noMetastore(err) {
