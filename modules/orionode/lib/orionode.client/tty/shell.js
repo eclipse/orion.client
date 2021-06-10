@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @license
- * Copyright (c) 2016 IBM Corporation and others.
+ * Copyright (c) 2016, 2017 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -9,7 +9,6 @@
  * Contributors: IBM Corporation - initial API and implementation
  ******************************************************************************/
 /*eslint-env browser, amd*/
-/*global Terminal*/
 define([
 	"socket.io/socket.io",
 	"requirejs/domReady",
@@ -17,8 +16,9 @@ define([
 	'orion/widgets/input/SettingsSelect',
 	'orion/commands',
 	"orion/PageUtil",
-	"xterm/xterm"
-], function(io, onReady, DropDownMenu, SettingsSelect, mCommands, PageUtil, Terminal) {
+	"xterm/xterm",
+	'tty/shellIntegrationCmd'
+], function(io, onReady, DropDownMenu, SettingsSelect, mCommands, PageUtil, Terminal, mShellIntegrationCmd) {
 
 	var term, serviceRegistry;
 	var colorScheme = "Dark";
@@ -86,6 +86,10 @@ define([
 			});
 			socket.on('data', function(data) {
 				term.write(data);
+				var apc = parseAPC(data);
+				if (apc) {
+					mShellIntegrationCmd.execute(socket, apc.split('\r\n'));
+				}
 			});
 			socket.on('disconnect', function() {
 				term.destroy();
@@ -99,6 +103,31 @@ define([
 	function getCWD() {
 		var result = PageUtil.matchResourceParameters(window.location.href).resource;
 		return result.length > 0 ? result : null;
+	}
+
+	var pendingAPC = "";
+	function parseAPC(data) {
+		if (pendingAPC) {
+			var end = data.indexOf(String.fromCharCode(27));
+			if (end > -1) {
+				var bakPendingAPC = pendingAPC;
+				pendingAPC = "";
+				return bakPendingAPC + data.substr(0, end)
+			} else {
+				pendingAPC += data;
+			}
+		} else {
+			var apcStart = data.indexOf(String.fromCharCode(27) + '_');
+			if (apcStart > -1) {
+				var end = data.indexOf(String.fromCharCode(27), apcStart + 2);
+				if (end > -1) {
+					return data.substr(apcStart + 2, end - apcStart - 2);
+				} else {
+					pendingAPC += data.substr(apcStart + 2);
+				}
+			}
+		}
+		return null;
 	}
 
 	function changeScheme(schemeName) {

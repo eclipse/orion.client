@@ -143,6 +143,19 @@ exports.install = function(options, io) {
 					: sock.emit('data', data);
 				});
 
+				if (process.platform !== 'win32') {
+					var orionIntegrationScriptPath = path.resolve('./lib/tty_orion_integration.sh');
+					terminal.write('. "' + orionIntegrationScriptPath + '"\n');
+				}
+
+				sock.on('absolute2project', function(absolute, callback) {
+					if (absolute.startsWith(userWorkspaceDir)) {
+						callback(absolute.substr(userWorkspaceDir.length));
+					} else {
+						callback(null);
+					}
+				});
+
 				logger.info('Created new %s (fd: %d, pid: %d)',
 					shell,
 					terminal.fd, 
