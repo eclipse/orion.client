@@ -62,7 +62,7 @@
     "chai": "^3.5.0",
     "chalk": "^1.0.0",
     "coveralls": "^3.0.3",
-    "electron": "4.1.1",
+    "electron": "9.1.0",
     "eslint": "^5.12.0",
     "grunt": "^1.0.1",
     "grunt-cli": "^1.2.0",
