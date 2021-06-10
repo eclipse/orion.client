@@ -596,7 +596,12 @@ _:-moz-tree-row(hover), .gitChangeListCheck { /* Firefox  HACK */
 .sectionTitle {
 	font-size: 12px;
 	font-weight: normal !important;
+	margin-top: 5px;
 	padding-bottom: 3px;
+}
+
+.sectionWrapper {
+	padding: 6px;
 }
 
 .gitCommitListLoaded {

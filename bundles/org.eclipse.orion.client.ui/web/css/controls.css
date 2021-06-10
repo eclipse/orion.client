@@ -1346,7 +1346,7 @@ html[dir="rtl"] .sectionWrapper, html[dir="rtl"] .sectionTable{ /* ACGC */
 	background: none repeat scroll 0 0 #f4f4f4;
 	vertical-align: middle;
 	font-weight: bold;
-	padding: 6px;
+	padding: 0px;
 	color: #707070;
 	margin-bottom: 0;
 	border-color: #e3e7ea;
