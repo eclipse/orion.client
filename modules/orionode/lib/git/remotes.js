@@ -337,7 +337,8 @@ function pushRemote(req, res, remote, branch, pushSrcRef, tags, force) {
 	var repo;
 	var remoteObj;
 	var credsCopy = Object.assign({}, req.body);
-	var task = new tasks.Task(res, false, true, 0 ,true);	
+	var task = new tasks.Task(res, false, true, 0 ,true);
+	var updates = {};
 	return clone.getRepo(req)
 	.then(function(r) {
 		repo = r;
@@ -374,32 +375,43 @@ function pushRemote(req, res, remote, branch, pushSrcRef, tags, force) {
 				});
 				return refSpecs;
 			});
-		}else{
-			return refSpecs;
 		}
+		return refSpecs;
 	})
 	.then(function(refSpecs){
 		return remoteObj.push(
-			refSpecs, {callbacks: clone.getRemoteCallbacks(credsCopy, req.user.username, task)}
+			refSpecs, {callbacks: clone.getRemoteCallbacks(credsCopy, req.user.username, task, updates)}
 		);
 	})
 	.then(function(err) {
 		if (!err) {
+			var error = false;
+			var message = "";
+			var updateRefs = []
+			Object.keys(updates).forEach(function(k) {
+				if ("refs/heads/" + branch == k /*|| k.startsWith("refs/tags/") || k.startsWith("refs/for/")*/) {
+					if (typeof updates[k] === "string" && updates[k]) {
+						error = true;
+						message = updates[k];
+					}
+					updateRefs.push({
+						LocalName: req.body.PushSrcRef,
+						RemoteName: remote + "/" + branch,
+						Message: updates[k]
+					})
+				}
+			});
 			task.done({
 				HttpCode: 200,
 				Code: 0,
-				DetailedMessage: "OK",
-				Message: "OK",
+				DetailedMessage: message || "OK",
+				Message: message || "OK",
 				JsonData: {
-					Message: "",
-					Severity: "Ok",
-					Updates: [{
-						LocalName: req.body.PushSrcRef,
-						RemoteName: remote + "/" + branch,
-						Result: "UP_TO_DATE"
-					}]
+					Message: message || "OK",
+					Severity: error ? "Error" : "Ok",
+					Updates: updateRefs
 				},
-				Severity: "Ok"
+				Severity: error ? "Error" : "Ok"
 			});
 		} else {
 			throw new Error("Push failed.");

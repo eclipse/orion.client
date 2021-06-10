@@ -649,7 +649,7 @@ function foreachSubmodule(repo, operation, recursive, creds, username, task) {
 	});
 }
 
-function getRemoteCallbacks(creds, username, task) {
+function getRemoteCallbacks(creds, username, task, updates) {
 	return {
 		certificateCheck: function() {
 			return 1; // Continues connection even if SSL certificate check fails. 
@@ -661,6 +661,10 @@ function getRemoteCallbacks(creds, username, task) {
 			} else {
 				task.updateProgress("Receiving objects", progress.receivedObjects(), progress.totalObjects());
 			}
+		},
+		pushUpdateReference: function(ref, status) {
+			if (!updates) return;
+			updates[ref] = status;
 		},
 		/**
 		 * @callback
